@@ -2,7 +2,7 @@
 
 declare(strict_types=1);
 
-namespace Drupal\SwsDrushOutput\Spinner;
+namespace Drupal\SwsDrush\Output\Spinner;
 
 use Symfony\Component\Console\Helper\Helper;
 use Symfony\Component\Console\Helper\ProgressBar;

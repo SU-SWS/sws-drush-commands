@@ -2,9 +2,9 @@
 
 declare(strict_types=1);
 
-namespace Drupal\SwsDrushOutput;
+namespace Drupal\SwsDrush\Output;
 
-use Drupal\SwsDrushOutput\Spinner\Spinner;
+use Drupal\SwsDrush\Output\Spinner\Spinner;
 use Symfony\Component\Console\Output\ConsoleOutput;
 use Symfony\Component\Console\Output\OutputInterface;
 
@@ -39,7 +39,7 @@ class Checklist {
   public function completePreviousItem(): void {
     if ($this->useSpinner()) {
       $item = $this->getLastItem();
-      /** @var \Drush\Commands\SwsDrushOutput\Spinner\Spinner $spinner */
+      /** @var \Drush\Commands\SwsDrush\Output\Spinner\Spinner $spinner */
       $spinner = $item['spinner'];
       $spinner->setMessage('', 'detail');
       $spinner->setMessage($item['message']);
@@ -58,7 +58,7 @@ class Checklist {
       return;
     }
     if ($this->useSpinner()) {
-      /** @var \Drush\Commands\SwsDrushOutput\Spinner\Spinner $spinner */
+      /** @var \Drush\Commands\SwsDrush\Output\Spinner\Spinner $spinner */
       $spinner = $item['spinner'];
     }
 

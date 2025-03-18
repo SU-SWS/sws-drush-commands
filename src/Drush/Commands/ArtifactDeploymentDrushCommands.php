@@ -2,11 +2,11 @@
 
 declare(strict_types=1);
 
-namespace Drupal\SwsDrushDrush\Commands;
+namespace Drupal\SwsDrush\Drush\Commands;
 
 use Drush\Attributes as CLI;
-use Drupal\SwsDrushHelpers\LocalMachineHelper;
-use Drupal\SwsDrushOutput\Checklist;
+use Drupal\SwsDrush\Helpers\LocalMachineHelper;
+use Drupal\SwsDrush\Output\Checklist;
 use Drush\Commands\DrushCommands;
 use Drush\Drush;
 use Symfony\Component\Console\Input\InputOption;
@@ -38,40 +38,40 @@ final class ArtifactDeploymentDrushCommands extends DrushCommands {
    * Build and push an artifact based on the current drupal installation.
    */
   #[CLI\Command(name: 'artifact_deployment:build', aliases: ['ab'])]
-  #[CLI\Option(name: 'repo-root', description: 'Drupal install folder e.g. docroot or web')]
   #[CLI\Option(name: 'drupal-core-folder', description: 'Drupal install folder e.g. docroot or web')]
-  #[CLI\Option(name: 'destination-git-url', description: 'Destination git repo url')]
-  #[CLI\Option(name: 'destination-git-branch', description: 'Destination branch')]
+  #[CLI\Option(name: 'git-url', description: 'Destination git repo url')]
+  #[CLI\Option(name: 'branch', description: 'Destination branch')]
+  #[CLI\Option(name: 'tag', description: 'Destination Tag name')]
   #[CLI\Option(name: 'no-sanitize', description: 'Do not sanitize the build artifact')]
   #[CLI\Option(name: 'no-push', description: 'Do not push changes to VCS repository')]
   #[CLI\Option(name: 'post-build-script', description: 'Shell script to run after the build')]
+  #[CLI\Option(name: 'artifact-dir', description: 'Directory to build the artifact')]
   #[CLI\Usage(name: 'artifact_deployment:build', description: 'Usage description')]
   public function buildCommand(
     $options = [
-      'repo-root' => '',
       'drupal-core-folder' => 'docroot',
-      'destination-git-url' => InputOption::VALUE_REQUIRED,
-      'destination-git-branch' => InputOption::VALUE_REQUIRED,
+      'git-url' => InputOption::VALUE_REQUIRED,
+      'branch' => InputOption::VALUE_OPTIONAL,
+      'tag' => InputOption::VALUE_OPTIONAL,
       'no-sanitize' => FALSE,
       'no-push' => FALSE,
       'post-build-script' => NULL,
+      'artifact-dir' => NULL,
     ]
   ): void {
-
-    $this->ensureOption('repo-root', [$this, 'askRepoRoot'], TRUE);
-    $this->ensureOption('destination-git-url', [$this, 'askGitUrl'], TRUE);
-    $this->ensureOption('destination-git-branch', [$this, 'askGitBranch'], TRUE);
+    $this->ensureOption('git-url', [$this, 'askGitUrl'], TRUE);
+    $this->ensureOption('branch', [$this, 'askGitBranch'], TRUE);
 
     /** @var \Drush\Boot\BootstrapManager $bootstrap */
     $bootstrap = Drush::bootstrapManager();
-    $this->dir = !empty($options['repo-root']) ? $options['repo-root'] : $bootstrap->getComposerRoot();
+    $this->dir = $bootstrap->getComposerRoot();
 
     $this->localMachineHelper = new LocalMachineHelper();
     $this->localMachineHelper->setLogger($this->logger());
     $this->localMachineHelper->setInput($this->input());
     $this->localMachineHelper->setOutput($this->output());
 
-    $artifactDir = Path::join(sys_get_temp_dir(), 'drupal-artifact-build');
+    $artifactDir = $options['artifact-dir'] ?: Path::join(sys_get_temp_dir(), 'drupal-artifact-build');
     $this->composerJsonPath = Path::join($this->dir, 'composer.json');
     $this->docrootPath = Path::join($this->dir, $options['drupal-core-folder']);
     $this->validateSourceCode();
@@ -87,9 +87,9 @@ final class ArtifactDeploymentDrushCommands extends DrushCommands {
     $outputCallback = $this->getOutputCallback($this->output(), $this->checklist);
 
     $destinationGitUrls = [];
-    $destinationGitUrls[] = $this->input->getOption('destination-git-url');
+    $destinationGitUrls[] = $this->input->getOption('git-url');
 
-    $this->destinationGitRef = $this->input->getOption('destination-git-branch');
+    $this->destinationGitRef = $this->input->getOption('branch');
     $sourceGitBranch = $this->destinationGitRef;
     $destinationGitUrlsString = implode(',', $destinationGitUrls);
     $refType = 'branch';
@@ -129,13 +129,14 @@ final class ArtifactDeploymentDrushCommands extends DrushCommands {
     }
 
     $this->checklist->addItem("Committing changes (commit hash: $commitHash)");
-    $this->commit($outputCallback, $artifactDir, $commitHash);
+    $this->commit($outputCallback, $artifactDir, $commitHash, $options['tag']);
     $this->checklist->completePreviousItem();
 
     if (!$options['no-push']) {
-      $this->checklist->addItem("Pushing changes to <options=bold>$this->destinationGitRef</> branch.");
-      $this->pushArtifact($outputCallback, $artifactDir, $destinationGitUrls, $this->destinationGitRef . ':' . $this->destinationGitRef);
-      $this->checklist->completePreviousItem();
+      // TODO push tag instead of branch.
+      //      $this->checklist->addItem("Pushing changes to <options=bold>$this->destinationGitRef</> branch.");
+      //      $this->pushArtifact($outputCallback, $artifactDir, $destinationGitUrls, $this->destinationGitRef . ':' . $this->destinationGitRef);
+      //      $this->checklist->completePreviousItem();
     }
 
     $this->logger()->success(dt('Artifact successfully built and pushed.'));
@@ -400,7 +401,7 @@ final class ArtifactDeploymentDrushCommands extends DrushCommands {
   /**
    * Commit the artifact.
    */
-  private function commit(\Closure $outputCallback, string $artifactDir, string $commitHash, string $relativeDrupalDir = ''): void {
+  private function commit(\Closure $outputCallback, string $artifactDir, string $commitHash, ?string $tag, string $relativeDrupalDir = ''): void {
     $outputCallback('out', 'Adding and committing changed files');
     $this->localMachineHelper->checkRequiredBinariesExist(['git']);
     $process = $this->localMachineHelper->execute(['git', 'add', '-A'],
@@ -430,10 +431,24 @@ final class ArtifactDeploymentDrushCommands extends DrushCommands {
         sprintf('Could not commit via git: %s%s', $process->getErrorOutput(), $process->getOutput())
       );
     }
+
+    if ($tag) {
+      $process = $this->localMachineHelper->execute(['git', 'tag', '-a', $tag, '-m', $tag],
+        $outputCallback,
+        $artifactDir,
+        ($this->output->getVerbosity() > OutputInterface::VERBOSITY_NORMAL));
+
+      if (!$process->isSuccessful()) {
+        throw new \RuntimeException(
+          sprintf('Could not create git tag via git: %s%s', $process->getErrorOutput(), $process->getOutput())
+        );
+      }
+    }
   }
 
   private function generateCommitMessage(string $commitHash): array|string {
-    return "Automated commit by Articfact Deployment (source commit: $commitHash)";
+    // TODO, get last commit message instead.
+    return "Automated commit by SWS Deployment (source commit: $commitHash)";
   }
 
   /**

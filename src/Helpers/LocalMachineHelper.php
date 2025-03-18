@@ -2,7 +2,7 @@
 
 declare(strict_types=1);
 
-namespace Drupal\SwsDrushHelpers;
+namespace Drupal\SwsDrush\Helpers;
 
 use Exception;
 use loophp\phposinfo\OsInfo;
