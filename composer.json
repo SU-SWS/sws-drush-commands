@@ -12,7 +12,8 @@
         "drush/drush": "<11.0"
     },
     "require": {
-        "loophp/phposinfo": "~1.0"
+        "loophp/phposinfo": "~1.0",
+        "acquia/drupal-environment-detector": "^1.7"
     },
     "replace": {
         "drupal/artifact_deployment": "*"

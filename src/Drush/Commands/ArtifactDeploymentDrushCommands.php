@@ -30,6 +30,8 @@ final class ArtifactDeploymentDrushCommands extends DrushCommands {
 
   private string $destinationGitRef;
 
+  private ?string $destinationTag;
+
   protected Checklist $checklist;
 
   protected LocalMachineHelper $localMachineHelper;
@@ -37,10 +39,10 @@ final class ArtifactDeploymentDrushCommands extends DrushCommands {
   /**
    * Build and push an artifact based on the current drupal installation.
    */
-  #[CLI\Command(name: 'artifact_deployment:build', aliases: ['ab'])]
+  #[CLI\Command(name: 'artifact:build', aliases: ['ab'])]
   #[CLI\Option(name: 'drupal-core-folder', description: 'Drupal install folder e.g. docroot or web')]
-  #[CLI\Option(name: 'git-url', description: 'Destination git repo url')]
-  #[CLI\Option(name: 'branch', description: 'Destination branch')]
+  #[CLI\Option(name: 'git-url', description: 'Destination git repo url, comma delimited for multiple.')]
+  #[CLI\Option(name: 'branch', description: 'Destination branch name')]
   #[CLI\Option(name: 'tag', description: 'Destination Tag name')]
   #[CLI\Option(name: 'no-sanitize', description: 'Do not sanitize the build artifact')]
   #[CLI\Option(name: 'no-push', description: 'Do not push changes to VCS repository')]
@@ -59,9 +61,6 @@ final class ArtifactDeploymentDrushCommands extends DrushCommands {
       'artifact-dir' => NULL,
     ]
   ): void {
-    $this->ensureOption('git-url', [$this, 'askGitUrl'], TRUE);
-    $this->ensureOption('branch', [$this, 'askGitBranch'], TRUE);
-
     /** @var \Drush\Boot\BootstrapManager $bootstrap */
     $bootstrap = Drush::bootstrapManager();
     $this->dir = $bootstrap->getComposerRoot();
@@ -71,6 +70,15 @@ final class ArtifactDeploymentDrushCommands extends DrushCommands {
     $this->localMachineHelper->setInput($this->input());
     $this->localMachineHelper->setOutput($this->output());
 
+    $this->ensureOption('git-url', fn() => $this->io()
+      ->askRequired('Remote Git URL'), TRUE);
+
+    $this->ensureOption('branch', fn() => $this->io()
+      ->ask('Target branch', $this->getLocalGitBranch()), FALSE);
+
+    $this->ensureOption('tag', fn() => $this->io()
+      ->ask('Provide a tag name'), FALSE);
+
     $artifactDir = $options['artifact-dir'] ?: Path::join(sys_get_temp_dir(), 'drupal-artifact-build');
     $this->composerJsonPath = Path::join($this->dir, 'composer.json');
     $this->docrootPath = Path::join($this->dir, $options['drupal-core-folder']);
@@ -78,6 +86,7 @@ final class ArtifactDeploymentDrushCommands extends DrushCommands {
 
     $isDirty = $this->isLocalGitRepoDirty();
     $commitHash = $this->getLocalGitCommitHash();
+
     if ($isDirty) {
       throw new \RuntimeException(
         'Pushing code was aborted because your local Git repository has uncommitted changes. Either commit, reset, or stash your changes via git.'
@@ -86,25 +95,26 @@ final class ArtifactDeploymentDrushCommands extends DrushCommands {
     $this->checklist = new Checklist($this->output());
     $outputCallback = $this->getOutputCallback($this->output(), $this->checklist);
 
-    $destinationGitUrls = [];
-    $destinationGitUrls[] = $this->input->getOption('git-url');
+    $destinationGitUrls = explode(',', $this->input->getOption('git-url'));
 
-    $this->destinationGitRef = $this->input->getOption('branch');
-    $sourceGitBranch = $this->destinationGitRef;
+    $this->destinationGitRef = $this->input->getOption('branch') ?: $this->input->getOption('tag') ?: $this->getLocalGitBranch();
+    $this->destinationTag = $this->input->getOption('tag');
     $destinationGitUrlsString = implode(',', $destinationGitUrls);
-    $refType = 'branch';
+
+    $refType = $this->input->getOption('branch') ? 'branch' : 'tag';
+
     $this->io()->note([
       'The command will:',
-      "- git clone $sourceGitBranch from $destinationGitUrls[0]",
+      "- git clone $this->destinationGitRef from $destinationGitUrls[0]",
       "- Compile the contents of $this->dir into an artifact in a temporary directory",
-      "- Copy the artifact files into the checked out copy of $sourceGitBranch",
+      "- Copy the artifact files into the checked out copy of $this->destinationGitRef",
       "- Run provided post-build {$options['post-build-script']} script if specified",
       "- Commit changes and push the $this->destinationGitRef $refType to the following git remote(s):",
       "  $destinationGitUrlsString",
     ]);
 
     $this->checklist->addItem('Preparing artifact directory');
-    $this->cloneSourceBranch($outputCallback, $artifactDir, $destinationGitUrls[0], $sourceGitBranch);
+    $this->cloneSourceBranch($outputCallback, $artifactDir, $destinationGitUrls[0], $this->destinationGitRef);
     $this->checklist->completePreviousItem();
 
     $this->checklist->addItem('Generating build artifact');
@@ -129,17 +139,18 @@ final class ArtifactDeploymentDrushCommands extends DrushCommands {
     }
 
     $this->checklist->addItem("Committing changes (commit hash: $commitHash)");
-    $this->commit($outputCallback, $artifactDir, $commitHash, $options['tag']);
+    $this->commit($outputCallback, $artifactDir, $commitHash, $this->destinationTag);
     $this->checklist->completePreviousItem();
 
     if (!$options['no-push']) {
-      // TODO push tag instead of branch.
-      //      $this->checklist->addItem("Pushing changes to <options=bold>$this->destinationGitRef</> branch.");
-      //      $this->pushArtifact($outputCallback, $artifactDir, $destinationGitUrls, $this->destinationGitRef . ':' . $this->destinationGitRef);
-      //      $this->checklist->completePreviousItem();
+      $this->checklist->addItem("Pushing changes to <options=bold>$this->destinationGitRef</> $refType.");
+      $this->pushArtifact($outputCallback, $artifactDir, $destinationGitUrls, $this->destinationGitRef . ':' . $this->destinationGitRef, $refType);
+      $this->checklist->completePreviousItem();
+      $this->logger()->success(dt('Artifact successfully built and pushed.'));
+      return;
     }
 
-    $this->logger()->success(dt('Artifact successfully built and pushed.'));
+    $this->logger()->success(dt('Artifact successfully built but not pushed.'));
   }
 
   protected function ensureOption(string $name, callable $asker, bool $required): void {
@@ -156,18 +167,6 @@ final class ArtifactDeploymentDrushCommands extends DrushCommands {
     }
 
     $this->input->setOption($name, $value);
-  }
-
-  protected function askRepoRoot(): string {
-    return $this->io()->askRequired('Repository root directory');
-  }
-
-  protected function askGitUrl(): string {
-    return $this->io()->askRequired('Remote Git URL');
-  }
-
-  protected function askGitBranch(): string {
-    return $this->io()->ask('Target branch');
   }
 
   private function validateSourceCode(): void {
@@ -196,6 +195,22 @@ final class ArtifactDeploymentDrushCommands extends DrushCommands {
     return !$process->isSuccessful();
   }
 
+  protected function getLocalGitBranch(): string {
+    $this->localMachineHelper->checkRequiredBinariesExist(['git']);
+    $process = $this->localMachineHelper->execute([
+      'git',
+      'rev-parse',
+      '--abbrev-ref',
+      'HEAD',
+    ], NULL, $this->dir, FALSE);
+
+    if (!$process->isSuccessful()) {
+      throw new \RuntimeException('Unable to determine Git commit hash.');
+    }
+
+    return trim($process->getOutput());
+  }
+
   protected function getLocalGitCommitHash(): string {
     $this->localMachineHelper->checkRequiredBinariesExist(['git']);
     $process = $this->localMachineHelper->execute([
@@ -215,7 +230,7 @@ final class ArtifactDeploymentDrushCommands extends DrushCommands {
     OutputInterface $output,
     Checklist $checklist
   ): \Closure {
-    return static function (mixed $type, mixed $buffer) use ($checklist, $output): void {
+    return static function(mixed $type, mixed $buffer) use ($checklist, $output): void {
       if (!$output->isVerbose() && $checklist->getItems()) {
         $checklist->updateProgressBar($buffer);
       }
@@ -239,27 +254,49 @@ final class ArtifactDeploymentDrushCommands extends DrushCommands {
 
     $outputCallback('out', "Initializing Git in $artifactDir");
     $this->localMachineHelper->checkRequiredBinariesExist(['git']);
-    $process = $this->localMachineHelper->execute(['git', 'clone', '--depth=1', $vcsUrl, $artifactDir],
+    $process = $this->localMachineHelper->execute([
+      'git',
+      'clone',
+      '--depth=1',
+      $vcsUrl,
+      $artifactDir,
+    ],
       $outputCallback,
       NULL,
       ($this->output->getVerbosity() > OutputInterface::VERBOSITY_NORMAL));
     if (!$process->isSuccessful()) {
       throw new \RuntimeException(sprintf('Failed to clone repository from the Cloud Platform: %s', $process->getErrorOutput()));
     }
-    $process = $this->localMachineHelper->execute(['git', 'fetch', '--depth=1', '--update-head-ok', $vcsUrl, $vcsPath . ':' . $vcsPath],
+    $process = $this->localMachineHelper->execute([
+      'git',
+      'fetch',
+      '--depth=1',
+      '--update-head-ok',
+      $vcsUrl,
+      $vcsPath . ':' . $vcsPath,
+    ],
       $outputCallback,
       $artifactDir,
       ($this->output->getVerbosity() > OutputInterface::VERBOSITY_NORMAL));
     if (!$process->isSuccessful()) {
       // Remote branch does not exist. Just create it locally. This will create
       // the new branch off of the current commit.
-      $process = $this->localMachineHelper->execute(['git', 'checkout', '-b', $vcsPath],
+      $process = $this->localMachineHelper->execute([
+        'git',
+        'checkout',
+        '-b',
+        $vcsPath,
+      ],
         $outputCallback,
         $artifactDir,
         ($this->output->getVerbosity() > OutputInterface::VERBOSITY_NORMAL));
     }
     else {
-      $process = $this->localMachineHelper->execute(['git', 'checkout', $vcsPath],
+      $process = $this->localMachineHelper->execute([
+        'git',
+        'checkout',
+        $vcsPath,
+      ],
         $outputCallback,
         $artifactDir,
         ($this->output->getVerbosity() > OutputInterface::VERBOSITY_NORMAL));
@@ -271,11 +308,23 @@ final class ArtifactDeploymentDrushCommands extends DrushCommands {
     }
 
     $outputCallback('out', 'Global .gitignore file is temporarily disabled during artifact builds.');
-    $this->localMachineHelper->execute(['git', 'config', '--local', 'core.excludesFile', 'false'],
+    $this->localMachineHelper->execute([
+      'git',
+      'config',
+      '--local',
+      'core.excludesFile',
+      'false',
+    ],
       $outputCallback,
       $artifactDir,
       ($this->output->getVerbosity() > OutputInterface::VERBOSITY_NORMAL));
-    $this->localMachineHelper->execute(['git', 'config', '--local', 'core.fileMode', 'true'],
+    $this->localMachineHelper->execute([
+      'git',
+      'config',
+      '--local',
+      'core.fileMode',
+      'true',
+    ],
       $outputCallback,
       $artifactDir,
       ($this->output->getVerbosity() > OutputInterface::VERBOSITY_NORMAL));
@@ -321,11 +370,18 @@ final class ArtifactDeploymentDrushCommands extends DrushCommands {
     $targetFinder = $this->localMachineHelper->getFinder();
     $targetFinder->in($artifactDir)->ignoreDotFiles(FALSE);
     $this->localMachineHelper->getFilesystem()->remove($targetFinder);
-    $this->localMachineHelper->getFilesystem()->mirror($this->dir, $artifactDir, $originFinder, ['override' => TRUE]);
+    $this->localMachineHelper->getFilesystem()
+      ->mirror($this->dir, $artifactDir, $originFinder, ['override' => TRUE]);
 
     $this->localMachineHelper->checkRequiredBinariesExist(['composer']);
     $outputCallback('out', 'Installing Composer production dependencies');
-    $process = $this->localMachineHelper->execute(['composer', 'install', '--no-dev', '--no-interaction', '--optimize-autoloader'],
+    $process = $this->localMachineHelper->execute([
+      'composer',
+      'install',
+      '--no-dev',
+      '--no-interaction',
+      '--optimize-autoloader',
+    ],
       $outputCallback,
       $artifactDir,
       ($this->output->getVerbosity() > OutputInterface::VERBOSITY_NORMAL));
@@ -401,7 +457,7 @@ final class ArtifactDeploymentDrushCommands extends DrushCommands {
   /**
    * Commit the artifact.
    */
-  private function commit(\Closure $outputCallback, string $artifactDir, string $commitHash, ?string $tag, string $relativeDrupalDir = ''): void {
+  private function commit(\Closure $outputCallback, string $artifactDir, string $commitHash, ?string $tag = NULL): void {
     $outputCallback('out', 'Adding and committing changed files');
     $this->localMachineHelper->checkRequiredBinariesExist(['git']);
     $process = $this->localMachineHelper->execute(['git', 'add', '-A'],
@@ -413,16 +469,26 @@ final class ArtifactDeploymentDrushCommands extends DrushCommands {
         sprintf('Could not add files to artifact via git: %s%s', $process->getErrorOutput(), $process->getOutput())
       );
     }
-    foreach (array_merge($this->vendorDirs($relativeDrupalDir), $this->scaffoldFiles($artifactDir, $relativeDrupalDir)) as $file) {
+    foreach (array_merge($this->vendorDirs(), $this->scaffoldFiles($artifactDir)) as $file) {
       $this->logger->debug("Forcibly adding $file");
-      $this->localMachineHelper->execute(['git', 'add', '-f', $file], NULL, $artifactDir, FALSE);
+      $this->localMachineHelper->execute([
+        'git',
+        'add',
+        '-f',
+        $file,
+      ], NULL, $artifactDir, FALSE);
       if (!$process->isSuccessful()) {
         // This will fatally error if the file doesn't exist. Suppress error output.
         $this->io->warning("Unable to forcibly add $file to new branch");
       }
     }
     $commitMessage = $this->generateCommitMessage($commitHash);
-    $process = $this->localMachineHelper->execute(['git', 'commit', '-m', $commitMessage],
+    $process = $this->localMachineHelper->execute([
+      'git',
+      'commit',
+      '-m',
+      $commitMessage,
+    ],
       $outputCallback,
       $artifactDir,
       ($this->output->getVerbosity() > OutputInterface::VERBOSITY_NORMAL));
@@ -433,7 +499,14 @@ final class ArtifactDeploymentDrushCommands extends DrushCommands {
     }
 
     if ($tag) {
-      $process = $this->localMachineHelper->execute(['git', 'tag', '-a', $tag, '-m', $tag],
+      $process = $this->localMachineHelper->execute([
+        'git',
+        'tag',
+        '-a',
+        $tag,
+        '-m',
+        $tag,
+      ],
         $outputCallback,
         $artifactDir,
         ($this->output->getVerbosity() > OutputInterface::VERBOSITY_NORMAL));
@@ -454,24 +527,24 @@ final class ArtifactDeploymentDrushCommands extends DrushCommands {
   /**
    * Get a list of scaffold files from Drupal core's composer.json.
    */
-  private function scaffoldFiles(string $artifactDir, $relativeDrupalDir = ''): array {
+  private function scaffoldFiles(string $artifactDir): array {
     if (!empty($this->scaffoldFiles)) {
       return $this->scaffoldFiles;
     }
 
     $this->scaffoldFiles = [];
     $composerJson = json_decode(
-      $this->localMachineHelper->readFile(Path::join($artifactDir . '/' . $relativeDrupalDir, 'docroot', 'core', 'composer.json')),
+      $this->localMachineHelper->readFile(Path::join($artifactDir, 'docroot', 'core', 'composer.json')),
       TRUE,
       512,
       JSON_THROW_ON_ERROR
     );
     foreach ($composerJson['extra']['drupal-scaffold']['file-mapping'] as $file => $assetPath) {
       if (str_starts_with($file, '[web-root]')) {
-        $this->scaffoldFiles[] = $relativeDrupalDir . str_replace('[web-root]', 'docroot', $file);
+        $this->scaffoldFiles[] = str_replace('[web-root]', 'docroot', $file);
       }
     }
-    $this->scaffoldFiles[] = $relativeDrupalDir . 'docroot/autoload.php';
+    $this->scaffoldFiles[] = 'docroot/autoload.php';
 
     return $this->scaffoldFiles;
   }
@@ -479,15 +552,21 @@ final class ArtifactDeploymentDrushCommands extends DrushCommands {
   /**
    * Push the artifact.
    */
-  private function pushArtifact(\Closure $outputCallback, string $artifactDir, array $vcsUrls, string $destGitBranch): void {
+  private function pushArtifact(\Closure $outputCallback, string $artifactDir, array $vcsUrls, string $destGit, string $destType = 'branch'): void {
     $this->localMachineHelper->checkRequiredBinariesExist(['git']);
     foreach ($vcsUrls as $vcsUrl) {
       $outputCallback('out', "Pushing changes to Git ($vcsUrl)");
-      $args = [
+      $args = $destType == 'branch' ? [
         'git',
         'push',
         $vcsUrl,
-        $destGitBranch,
+        $destGit,
+      ] : [
+        'git',
+        'push',
+        $vcsUrl,
+        'tag',
+        $destGit,
       ];
       $process = $this->localMachineHelper->execute(
         $args,
