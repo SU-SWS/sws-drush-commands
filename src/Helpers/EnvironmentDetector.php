@@ -1,5 +1,7 @@
 <?php
 
+declare(strict_types=1);
+
 namespace Drupal\SwsDrush\Helpers;
 
 use Acquia\DrupalEnvironmentDetector\AcquiaDrupalEnvironmentDetector;
@@ -11,7 +13,7 @@ use loophp\phposinfo\OsInfo;
  *
  * @package Acquia\Blt\Robo\Common
  */
-class EnvironmentDetector extends AcquiaDrupalEnvironmentDetector {
+final class EnvironmentDetector extends AcquiaDrupalEnvironmentDetector {
 
   /**
    * Get CI env name.

@@ -1,0 +1,15 @@
+command:
+  artifact:
+    build:
+      options:
+        git-url:
+          - foobar@github.com
+        post-build-script: script-path.sh
+        artifact-dir: deploy
+  site:
+    alias-build:
+      options:
+        app-id: acquia-app-id
+        app-key: key
+        app-secret: secret
+        alias-dir: drush/sites

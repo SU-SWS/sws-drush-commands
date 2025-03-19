@@ -3,7 +3,7 @@
     "type": "drupal-drush",
     "description": "SWS Drush commands.",
     "license": "GPL-2.0-or-later",
-    "homepage": "https://github.com/SU-SWS/sws-drush-commands",
+    "homepage": "https://packagist.org/packages/su-sws/sws-drush-commands",
     "support": {
         "issues": "https://github.com/SU-SWS/sws-drush-commands/issues",
         "source": "https://github.com/SU-SWS/sws-drush-commands"
@@ -13,7 +13,8 @@
     },
     "require": {
         "loophp/phposinfo": "~1.0",
-        "acquia/drupal-environment-detector": "^1.7"
+        "acquia/drupal-environment-detector": "^1.7",
+        "typhonius/acquia-php-sdk-v2": "^3.4"
     },
     "replace": {
         "drupal/artifact_deployment": "*"
