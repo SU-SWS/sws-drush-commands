@@ -17,9 +17,11 @@ use Symfony\Component\Process\Process;
 use function file_get_contents;
 
 /**
- * A helper for executing commands on the local client. A wrapper for 'exec' and 'passthru'.
+ * A helper for executing commands on the local client. A wrapper for 'exec'
+ * and 'passthru'.
  */
 class LocalMachineHelper {
+
   use LoggerAwareTrait;
 
   private ?bool $isTty;
@@ -27,6 +29,7 @@ class LocalMachineHelper {
   private array $installedBinaries = [];
 
   protected InputInterface $input;
+
   protected OutputInterface $output;
 
   public function setInput(InputInterface $input) {
@@ -49,8 +52,12 @@ class LocalMachineHelper {
     if (array_key_exists($command, $this->installedBinaries)) {
       return (bool) $this->installedBinaries[$command];
     }
-    $osCommand = OsInfo::isWindows() ? ['where', $command] : ['which', $command];
-    $exists = $this->execute($osCommand, NULL, NULL, FALSE, NULL, NULL, FALSE)->isSuccessful();
+    $osCommand = OsInfo::isWindows() ? ['where', $command] : [
+      'which',
+      $command,
+    ];
+    $exists = $this->execute($osCommand, NULL, NULL, FALSE, NULL, NULL, FALSE)
+      ->isSuccessful();
     $this->installedBinaries[$command] = $exists;
     return $exists;
   }
@@ -125,7 +132,7 @@ class LocalMachineHelper {
 
   private function executeProcess(Process $process, callable $callback = NULL, ?bool $printOutput = TRUE): Process {
     if ($callback === NULL && $printOutput !== FALSE) {
-      $callback = function (mixed $type, mixed $buffer): void {
+      $callback = function(mixed $type, mixed $buffer): void {
         $this->output->write($buffer);
       };
     }
@@ -201,7 +208,8 @@ class LocalMachineHelper {
    * Writes to a file on the local system.
    */
   public function writeFile(string $filename, string|StreamInterface $content): void {
-    $this->getFilesystem()->dumpFile($this->getLocalFilepath($filename), $content);
+    $this->getFilesystem()
+      ->dumpFile($this->getLocalFilepath($filename), $content);
   }
 
   /**

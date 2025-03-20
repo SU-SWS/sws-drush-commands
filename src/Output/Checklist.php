@@ -20,8 +20,7 @@ class Checklist {
   /**
    * Checklist constructor.
    */
-  public function __construct(private OutputInterface $output) {
-  }
+  public function __construct(private OutputInterface $output) {}
 
   public function addItem(string $message): void {
     $item = ['message' => $message];

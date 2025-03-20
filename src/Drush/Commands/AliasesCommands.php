@@ -30,24 +30,29 @@ final class AliasesCommands extends DrushCommands {
    * Build Drush Aliases.
    */
   #[CLI\Command(name: 'site:alias-build', aliases: ['sab'])]
+  #[CLI\Option(name: 'app-id', description: 'Acquia application ID')]
+  #[CLI\Option(name: 'app-key', description: 'Acquia API key')]
+  #[CLI\Option(name: 'app-secret', description: 'Acquia API secret')]
+  #[CLI\Option(name: 'alias-dir', description: 'Directory for alias files')]
   public function buildAliases($options = [
     'app-id' => InputOption::VALUE_REQUIRED,
     'app-key' => InputOption::VALUE_REQUIRED,
     'app-secret' => InputOption::VALUE_REQUIRED,
-    'alias-dir' => InputOption::VALUE_OPTIONAL,
+    'alias-dir' => 'drush/sites',
   ]
   ) {
+
     /** @var \Drush\Boot\BootstrapManager $bootstrap */
     $bootstrap = Drush::bootstrapManager();
     $this->aliasDir = $this->input()
       ->getOption('alias-dir') ?: Path::join($bootstrap->getComposerRoot(), 'drush', 'sites');
 
     $this->ensureOption('app-id', fn() => $this->io()
-      ->askRequired('Acquia Application ID'), TRUE);
+      ->ask('Acquia Application ID'), TRUE);
     $this->ensureOption('app-key', fn() => $this->io()
-      ->askRequired('Acquia Application Key'), TRUE);
+      ->ask('Acquia Application Key'), TRUE);
     $this->ensureOption('app-secret', fn() => $this->io()
-      ->askRequired('Acquia Application Secret'), TRUE);
+      ->password('Acquia Application Secret'), TRUE);
 
     $this->appId = $this->input()->getOption('app-id');
     $appKey = $this->input()->getOption('app-key');
@@ -162,8 +167,8 @@ final class AliasesCommands extends DrushCommands {
    * @param string $remoteUser
    *   The remote user.
    *
-   * @return array
-   *   The full alias for this site.
+   * @return array|FALSE
+   *   The full alias for this site, FALSE if skipped.
    */
   protected function getAliases(string $uri, string $envName, string $remoteHost, string $remoteUser): array|false {
     $alias = [];
@@ -238,7 +243,7 @@ final class AliasesCommands extends DrushCommands {
    *
    * @throws \Exception
    */
-  protected function writeSiteAliases($site_id, array $aliases) {
+  protected function writeSiteAliases(string $site_id, array $aliases) {
     if (!is_dir($this->aliasDir)) {
       mkdir($this->aliasDir, 0777, TRUE);
     }
