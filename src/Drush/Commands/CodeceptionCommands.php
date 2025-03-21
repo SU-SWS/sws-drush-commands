@@ -6,6 +6,7 @@ namespace Drupal\SwsDrush\Drush\Commands;
 
 use Drush\Attributes as CLI;
 use Drush\Commands\DrushCommands;
+use Drush\Drush;
 
 /**
  * A Drush command file.

@@ -9,6 +9,7 @@ use Drupal\SwsDrush\Helpers\AcquiaApi;
 use Drush\Attributes as CLI;
 use Drush\Commands\DrushCommands;
 use Drush\Drush;
+use StanfordCaravan\Robo\Tasks\loadTasks;
 use Symfony\Component\Console\Input\InputOption;
 use Symfony\Component\Filesystem\Path;
 use Symfony\Component\Yaml\Yaml;
@@ -18,6 +19,8 @@ use Symfony\Component\Yaml\Yaml;
  */
 final class AliasesCommands extends DrushCommands {
 
+  //  use LoadAllTasks;
+  use loadTasks;
   use SwsCommandsTrait;
 
   protected string $appId;
@@ -29,7 +32,7 @@ final class AliasesCommands extends DrushCommands {
   /**
    * Build Drush Aliases.
    */
-  #[CLI\Command(name: 'site:alias-build', aliases: ['sab'])]
+  #[CLI\Command(name: 'site:alias-build', aliases: ['aliases', 'sab'])]
   #[CLI\Option(name: 'app-id', description: 'Acquia application ID')]
   #[CLI\Option(name: 'app-key', description: 'Acquia API key')]
   #[CLI\Option(name: 'app-secret', description: 'Acquia API secret')]
@@ -41,7 +44,6 @@ final class AliasesCommands extends DrushCommands {
     'alias-dir' => 'drush/sites',
   ]
   ) {
-
     /** @var \Drush\Boot\BootstrapManager $bootstrap */
     $bootstrap = Drush::bootstrapManager();
     $this->aliasDir = $this->input()
@@ -233,7 +235,7 @@ final class AliasesCommands extends DrushCommands {
   /**
    * Writes site aliases to disk.
    *
-   * @param string $site_id
+   * @param string|int $site_id
    *   The siteID or alias group.
    * @param array $aliases
    *   The alias array for this site group.
@@ -243,7 +245,7 @@ final class AliasesCommands extends DrushCommands {
    *
    * @throws \Exception
    */
-  protected function writeSiteAliases(string $site_id, array $aliases) {
+  protected function writeSiteAliases(string|int $site_id, array $aliases) {
     if (!is_dir($this->aliasDir)) {
       mkdir($this->aliasDir, 0777, TRUE);
     }

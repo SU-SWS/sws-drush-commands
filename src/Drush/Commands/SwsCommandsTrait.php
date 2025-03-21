@@ -50,7 +50,7 @@ trait SwsCommandsTrait {
       $value = $asker();
     }
 
-    if ($required && $value === NULL) {
+    if ($required && !$value) {
       throw new \InvalidArgumentException(dt('The !optionName option is required.', [
         '!optionName' => $name,
       ]));
