@@ -27,14 +27,21 @@ trait SwsCommandsTrait {
     };
   }
 
+  public function getDir(): string {
+    if (isset($this->dir)) {
+      return $this->dir;
+    }
+    /** @var \Drush\Boot\BootstrapManager $bootstrap */
+    $bootstrap = Drush::bootstrapManager();
+    $this->dir = $bootstrap->getComposerRoot();
+    return $this->dir;
+  }
+
   public function localMachineHelper(): LocalMachineHelper {
     if (isset($this->localMachineHelper)) {
       return $this->localMachineHelper;
     }
-
-    /** @var \Drush\Boot\BootstrapManager $bootstrap */
-    $bootstrap = Drush::bootstrapManager();
-    $this->dir = $bootstrap->getComposerRoot();
+    $this->getDir();
 
     $this->localMachineHelper = new LocalMachineHelper();
     $this->localMachineHelper->setLogger($this->logger());

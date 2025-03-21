@@ -19,16 +19,17 @@ final class TestsCommands extends DrushCommands {
    * Test a PHPUnit test report file for expected coverage.
    */
   #[CLI\Command(name: 'tests:phpunit-coverage-check')]
-  #[CLI\Argument(name: 'xmlDirectory', description: 'Path to xml coverage directory when using --coverage-xml=[coverage/directory].')]
+  #[CLI\Argument(name: 'xml_directory', description: 'Path to xml coverage directory when using --coverage-xml=[coverage/directory].')]
   #[CLI\Option(name: 'min-coverage', description: 'Minimum coverage percent.')]
   #[CLI\Option(name: 'upload-coverage-report', description: 'Minimum coverage percent.')]
-  public function testPhpUnitCoverage(string $xmlDirectory, array $options = [
+  #[CLI\Option(name: 'clover-file', description: 'Path to clover.xml file using --coverage-clover=[clover/file.xml]')]
+  public function testPhpUnitCoverage(string $xml_directory, array $options = [
     'min-coverage' => 90,
     'upload-coverage-report' => FALSE,
     'clover-file' => InputOption::VALUE_OPTIONAL,
   ]
   ) {
-    $report = "$xmlDirectory/index.xml";
+    $report = "$xml_directory/index.xml";
     if (!file_exists($report)) {
       throw new \Exception('Coverage report not found at ' . $report);
     }
