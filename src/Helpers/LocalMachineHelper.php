@@ -73,7 +73,8 @@ class LocalMachineHelper {
   /**
    * Executes a buffered command.
    */
-  public function execute(array $cmd, callable $callback = NULL, string $cwd = NULL, ?bool $printOutput = TRUE, float $timeout = NULL, array $env = NULL, bool $stdin = TRUE): Process {
+  public function execute(array|string $cmd, callable $callback = NULL, string $cwd = NULL, ?bool $printOutput = TRUE, float $timeout = NULL, array $env = NULL, bool $stdin = TRUE): Process {
+    $cmd = is_array($cmd) ? $cmd : [$cmd];
     $process = new Process($cmd);
     $process = $this->configureProcess($process, $cwd, $printOutput, $timeout, $env, $stdin);
     return $this->executeProcess($process, $callback, $printOutput);

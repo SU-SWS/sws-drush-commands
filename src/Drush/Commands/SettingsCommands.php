@@ -4,31 +4,22 @@ declare(strict_types=1);
 
 namespace Drupal\SwsDrush\Drush\Commands;
 
-use Drush\Drush;
 use Drush\Utils\StringUtils;
 use Robo\Contract\VerbosityThresholdInterface;
 use Drush\Attributes as CLI;
 use Drush\Commands\DrushCommands;
-use Robo\LoadAllTasks;
-use Robo\Collection\CollectionBuilder;
-use Robo\Tasks;
 
 /**
  * A Drush command file.
  */
 final class SettingsCommands extends DrushCommands {
-use LoadAllTasks;
+
   /**
    * Generates default settings files for Drupal and drush.
    */
   #[CLI\Command(name: 'source:build:settings', aliases: ['settings'])]
   public function buildSettings() {
-    $commandFileName = "SettingsCommands";
-    $container = Drush::getContainer();
 
-    $collection = CollectionBuilder::create($container, new Tasks());
-
-    return;
     // Generate hash file in salt.txt.
     $this->hashSalt();
 
