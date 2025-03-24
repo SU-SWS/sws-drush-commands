@@ -46,9 +46,9 @@ final class SettingsCommands extends DrushCommands {
 
     $xpand_config = [
       '${drupal.db.port}' => $options['db-port'],
-      '${drupal.db.host}' => $options['db-port'],
-      '${drupal.db.username}' => $options['db-port'],
-      '${drupal.db.password}' => $options['db-port'],
+      '${drupal.db.host}' => $options['db-host'],
+      '${drupal.db.username}' => $options['db-user'],
+      '${drupal.db.password}' => $options['db-pass'],
       '${drupal.db.database}' => $options['db-name'],
     ];
 
