@@ -35,7 +35,7 @@ final class ArtifactDeploymentDrushCommands extends DrushCommands {
   /**
    * Build and push an artifact based on the current drupal installation.
    */
-  #[CLI\Command(name: 'artifact:build', aliases: ['ab'])]
+  #[CLI\Command(name: 'artifact:deploy')]
   #[CLI\Option(name: 'drupal-core-folder', description: 'Drupal install folder e.g. docroot or web')]
   #[CLI\Option(name: 'git-url', description: 'Destination git repo url. Use multiple options for multiple urls. --git-url=foo --git-url=bar')]
   #[CLI\Option(name: 'branch', description: 'Destination branch name')]
@@ -62,18 +62,18 @@ final class ArtifactDeploymentDrushCommands extends DrushCommands {
       ->askRequired('Remote Git URL'), TRUE);
 
     $this->ensureOption('branch', fn() => $this->io()
-      ->ask('Target branch', $this->getLocalGitBranch()), FALSE);
+      ->ask('Target branch', $this->getLocalGitBranch()));
 
     $this->ensureOption('tag', fn() => $this->io()
-      ->ask('Provide a tag name'), FALSE);
+      ->ask('Provide a tag name'));
 
     $artifactDir = Path::join(sys_get_temp_dir(), 'drupal-artifact-build');
     if ($options['artifact-dir']) {
-      $artifactDir = str_starts_with($options['artifact-dir'], '/') ? $options['artifact-dir'] : Path::join($this->dir, $options['artifact-dir']);
+      $artifactDir = str_starts_with($options['artifact-dir'], '/') ? $options['artifact-dir'] : Path::join($this->getDir(), $options['artifact-dir']);
     }
 
-    $this->composerJsonPath = Path::join($this->dir, 'composer.json');
-    $this->docrootPath = Path::join($this->dir, $options['drupal-core-folder']);
+    $this->composerJsonPath = Path::join($this->getDir(), 'composer.json');
+    $this->docrootPath = Path::join($this->getDir(), $options['drupal-core-folder']);
     $this->validateSourceCode();
 
     $isDirty = $this->isLocalGitRepoDirty();
@@ -98,7 +98,7 @@ final class ArtifactDeploymentDrushCommands extends DrushCommands {
     $this->io()->note([
       'The command will:',
       "- git clone $this->destinationGitRef from $destinationGitUrls[0]",
-      "- Compile the contents of $this->dir into an artifact in a temporary directory",
+      "- Compile the contents of {$this->getDir()} into an artifact in a temporary directory",
       "- Copy the artifact files into the checked out copy of $this->destinationGitRef",
       "- Run provided post-build {$options['post-build-script']} script if specified",
       "- Commit changes and push the $this->destinationGitRef $refType to the following git remote(s):",
@@ -164,7 +164,7 @@ final class ArtifactDeploymentDrushCommands extends DrushCommands {
     // not want that.
       'git add . && git diff-index --cached --quiet HEAD',
       NULL,
-      $this->dir,
+      $this->getDir(),
       FALSE
     );
 
@@ -178,7 +178,7 @@ final class ArtifactDeploymentDrushCommands extends DrushCommands {
       'rev-parse',
       '--abbrev-ref',
       'HEAD',
-    ], NULL, $this->dir, FALSE);
+    ], NULL, $this->getDir(), FALSE);
 
     if (!$process->isSuccessful()) {
       throw new \RuntimeException('Unable to determine Git commit hash.');
@@ -193,7 +193,7 @@ final class ArtifactDeploymentDrushCommands extends DrushCommands {
       'git',
       'rev-parse',
       'HEAD',
-    ], NULL, $this->dir, FALSE);
+    ], NULL, $this->getDir(), FALSE);
 
     if (!$process->isSuccessful()) {
       throw new \RuntimeException('Unable to determine Git commit hash.');
@@ -324,9 +324,9 @@ final class ArtifactDeploymentDrushCommands extends DrushCommands {
    * Build the artifact.
    */
   private function buildArtifact(\Closure $outputCallback, string $artifactDir): void {
-    $outputCallback('out', "Mirroring source files from $this->dir to $artifactDir");
+    $outputCallback('out', "Mirroring source files from $this->getDir() to $artifactDir");
     $originFinder = $this->localmachineHelper()->getFinder();
-    $originFinder->in($this->dir)
+    $originFinder->in($this->getDir())
       // Include dot files like .htaccess.
       ->ignoreDotFiles(FALSE)
       // Ignore VCS ignored files (e.g. vendor) to speed up the mirror (Composer will restore them later).
@@ -335,7 +335,7 @@ final class ArtifactDeploymentDrushCommands extends DrushCommands {
     $targetFinder->in($artifactDir)->ignoreDotFiles(FALSE);
     $this->localmachineHelper()->getFilesystem()->remove($targetFinder);
     $this->localmachineHelper()->getFilesystem()
-      ->mirror($this->dir, $artifactDir, $originFinder, ['override' => TRUE]);
+      ->mirror($this->getDir(), $artifactDir, $originFinder, ['override' => TRUE]);
 
     $this->localmachineHelper()->checkRequiredBinariesExist(['composer']);
     $outputCallback('out', 'Installing Composer production dependencies');

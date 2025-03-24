@@ -1,6 +1,6 @@
 command:
   artifact:
-    build:
+    deploy:
       options:
         git-url:
           - foobar@github.com
@@ -13,3 +13,14 @@ command:
         app-key: key
         app-secret: secret
         alias-dir: drush/sites
+  source:
+    build:
+      settings:
+        options:
+          db-port: 3306
+          db-host: mysql
+          db-user: root
+          db-pass: password
+          db-name: drupal
+          multisites:
+            - default
