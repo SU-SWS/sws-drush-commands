@@ -45,10 +45,11 @@ final class SettingsCommands extends DrushCommands {
     $blt_local_drush_file = __DIR__ . '/../../../settings/default.local.drush.yml';
 
     $xpand_config = [
-      '${db.port}' => $options['db-port'],
-      '${db.host}' => $options['db-port'],
-      '${db.user}' => $options['db-port'],
-      '${db.pass}' => $options['db-port'],
+      '${drupal.db.port}' => $options['db-port'],
+      '${drupal.db.host}' => $options['db-port'],
+      '${drupal.db.username}' => $options['db-port'],
+      '${drupal.db.password}' => $options['db-port'],
+      '${drupal.db.database}' => $options['db-name'],
     ];
 
     foreach ($options['multisites'] as $multisite) {

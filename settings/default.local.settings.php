@@ -7,17 +7,17 @@
 
 use Drupal\SwsDrush\Helpers\EnvironmentDetector;
 
-$db_name = '${db.database}';
+$db_name = '${drupal.db.database}';
 
 /**
  * Database configuration.
  */
 $databases['default']['default'] = [
   'database' => $db_name,
-  'username' => '${db.user}',
-  'password' => '${db.pass}',
-  'host' => '${db.host}',
-  'port' => '${db.port}',
+  'username' => '${drupal.db.username}',
+  'password' => '${drupal.db.password}',
+  'host' => '${drupal.db.host}',
+  'port' => '${drupal.db.port}',
   'driver' => 'mysql',
   'prefix' => '',
 ];

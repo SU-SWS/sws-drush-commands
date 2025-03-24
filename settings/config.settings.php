@@ -19,17 +19,6 @@ use Drupal\SwsDrush\Helpers\EnvironmentDetector;
  * $settings['config_sync_directory'] = $dir . "/config/$site_dir" in
  * settings.php, and we will not overwrite it.
  */
-// phpcs:ignore
-if (!isset($blt_override_config_directories)) {
-  $blt_override_config_directories = TRUE;
-}
-
-// Configuration directories.
-if ($blt_override_config_directories) {
-  // phpcs:ignore
-  $settings['config_sync_directory'] = $repo_root . "/config/default";
-}
-
 $split_filename_prefix = 'config_split.config_split';
 
 /**
