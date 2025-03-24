@@ -7,7 +7,10 @@
 
 use Drupal\SwsDrush\Helpers\EnvironmentDetector;
 
-$db_name = '${drupal.db.database}';
+$site = basename(dirname(__DIR__));
+$multisite = $site == 'default' ? '' : "_$site";
+
+$db_name = '${drupal.db.database}' . $multisite;
 
 /**
  * Database configuration.
