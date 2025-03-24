@@ -247,8 +247,9 @@ final class AliasesCommands extends DrushCommands {
    * @throws \Exception
    */
   protected function writeSiteAliases(string|int $site_id, array $aliases) {
+    $file_system = $this->localmachineHelper()->getFilesystem();
     if (!is_dir($this->aliasDir)) {
-      mkdir($this->aliasDir, 0777, TRUE);
+      $file_system->mkdir($this->aliasDir);
     }
     $filePath = $this->aliasDir . '/' . $site_id . '.site.yml';
 

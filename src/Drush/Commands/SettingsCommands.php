@@ -53,6 +53,7 @@ final class SettingsCommands extends DrushCommands {
       '${drupal.db.password}' => $options['db-pass'],
       '${drupal.db.database}' => $options['db-name'],
     ];
+    $file_system = $this->localmachineHelper()->getFilesystem();
 
     foreach ($options['multisites'] as $multisite) {
       // Generate settings.php.
@@ -92,9 +93,7 @@ final class SettingsCommands extends DrushCommands {
 
       // Copy files without overwriting.
       foreach ($copy_map as $from => $to) {
-        if (!file_exists($to)) {
-          copy($from, $to);
-        }
+        $file_system->copy($from, $to);
       }
 
       foreach ($expand_map as $to) {
@@ -119,8 +118,10 @@ final class SettingsCommands extends DrushCommands {
     'setup:hash-salt',
   ])]
   public function hashSalt() {
+    $file_system = $this->localmachineHelper()->getFilesystem();
     $hash_salt_file = $this->getDir() . '/salt.txt';
-    if (!file_exists($hash_salt_file)) {
+
+    if (!$file_system->exists($hash_salt_file)) {
       $this->say("Generating hash salt...");
       file_put_contents($hash_salt_file, StringUtils::generatePassword(55));
     }
