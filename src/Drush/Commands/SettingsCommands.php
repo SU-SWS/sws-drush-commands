@@ -65,7 +65,7 @@ final class SettingsCommands extends DrushCommands {
       $default_includes_settings_file = "$multisite_dir/settings/default.includes.settings.php";
 
       // Generate sites/settings/default.global.settings.php.
-      $default_glob_settings_file = $this->getDir() . "docroot/sites/settings/default.global.settings.php";
+      $default_glob_settings_file = $this->getDir() . "/docroot/sites/settings/default.global.settings.php";
 
       // Generate local.drush.yml.
       $default_local_drush_file = "$multisite_dir/default.local.drush.yml";
