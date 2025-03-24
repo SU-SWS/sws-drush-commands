@@ -24,6 +24,8 @@ final class SettingsCommands extends DrushCommands {
   #[CLI\Option(name: 'db-user', description: 'Database User')]
   #[CLI\Option(name: 'db-pass', description: 'Database Password')]
   #[CLI\Option(name: 'db-name', description: 'Database Name')]
+  #[CLI\Option(name: 'multisites', description: 'List of multisites tracked in the code base. This should be stored in drush/drush.yml file.')]
+  #[CLI\Usage(name: 'Build settings files:', description: 'drush settings --db-port=3306 --db-host=mysql --db-user=root --db-pass=root --db-name=foobar')]
   public function buildSettings(array $options = [
     'db-port' => 3306,
     'db-host' => 'localhost',
