@@ -89,11 +89,11 @@ final class ArtifactDeploymentDrushCommands extends DrushCommands {
 
     $destinationGitUrls = $this->input->getOption('git-url');
 
-    $this->destinationGitRef = $this->input->getOption('branch') ?: $this->input->getOption('tag') ?: $this->getLocalGitBranch();
+    $this->destinationGitRef = $this->input->getOption('branch') ?: $this->getLocalGitBranch() . '-build';
     $this->destinationTag = $this->input->getOption('tag');
     $destinationGitUrlsString = implode(',', $destinationGitUrls);
 
-    $refType = $this->input->getOption('branch') ? 'branch' : 'tag';
+    $refType = $this->input->getOption('tag') ? 'tag' : 'branch';
 
     $this->io()->note([
       'The command will:',
