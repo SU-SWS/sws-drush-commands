@@ -9,7 +9,6 @@ use Drupal\SwsDrush\Helpers\AcquiaApi;
 use Drush\Attributes as CLI;
 use Drush\Commands\DrushCommands;
 use Drush\Drush;
-use StanfordCaravan\Robo\Tasks\loadTasks;
 use Symfony\Component\Console\Input\InputOption;
 use Symfony\Component\Filesystem\Path;
 use Symfony\Component\Yaml\Yaml;
@@ -19,8 +18,6 @@ use Symfony\Component\Yaml\Yaml;
  */
 final class AliasesCommands extends DrushCommands {
 
-  //  use LoadAllTasks;
-  use loadTasks;
   use SwsCommandsTrait;
 
   protected string $appId;
