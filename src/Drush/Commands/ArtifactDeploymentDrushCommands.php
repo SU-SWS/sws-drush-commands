@@ -6,6 +6,7 @@ namespace Drupal\SwsDrush\Drush\Commands;
 
 use Drush\Attributes as CLI;
 use Drupal\SwsDrush\Output\Checklist;
+use Drush\Boot\DrupalBootLevels;
 use Drush\Commands\DrushCommands;
 use Symfony\Component\Console\Input\InputOption;
 use Symfony\Component\Console\Output\OutputInterface;
@@ -14,6 +15,7 @@ use Symfony\Component\Filesystem\Path;
 /**
  * A Drush command file.
  */
+#[CLI\Bootstrap(DrupalBootLevels::NONE)]
 final class ArtifactDeploymentDrushCommands extends DrushCommands {
 
   use SwsCommandsTrait;

@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace Drupal\SwsDrush\Drush\Commands;
 
+use Drush\Boot\DrupalBootLevels;
 use Symfony\Component\Console\Input\InputOption;
 use Drush\Attributes as CLI;
 use Drush\Commands\DrushCommands;
@@ -12,6 +13,7 @@ use Symfony\Component\Yaml\Yaml;
 /**
  * A Drush command file.
  */
+#[CLI\Bootstrap(DrupalBootLevels::NONE)]
 final class MultisiteCommands extends DrushCommands {
 
   use SwsCommandsTrait;

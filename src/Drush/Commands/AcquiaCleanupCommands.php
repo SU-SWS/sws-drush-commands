@@ -6,12 +6,14 @@ namespace Drupal\SwsDrush\Drush\Commands;
 
 use Drupal\SwsDrush\Helpers\AcquiaApi;
 use Drush\Attributes as CLI;
+use Drush\Boot\DrupalBootLevels;
 use Drush\Commands\DrushCommands;
 use Symfony\Component\Console\Input\InputOption;
 
 /**
  * A Drush command file.
  */
+#[CLI\Bootstrap(DrupalBootLevels::NONE)]
 final class AcquiaCleanupCommands extends DrushCommands {
 
   use SwsCommandsTrait;
