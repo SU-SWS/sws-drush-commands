@@ -37,7 +37,7 @@ final class AliasesCommands extends DrushCommands {
   #[CLI\Option(name: 'app-key', description: 'Acquia API key')]
   #[CLI\Option(name: 'app-secret', description: 'Acquia API secret')]
   #[CLI\Option(name: 'alias-dir', description: 'Directory for alias files')]
-  #[CLI\Usage(name: 'Build Aliases:', description: 'drush aliases --app-id=foo --app-key=bar --app-secret=baz --alias-dir=drush/sites')]
+  #[CLI\Usage(name: 'drush aliases --app-id=foo --app-key=bar --app-secret=baz --alias-dir=drush/sites', description: 'Build all site aliases into drush/sites directory.')]
   public function buildAliases($options = [
     'app-id' => InputOption::VALUE_REQUIRED,
     'app-key' => InputOption::VALUE_REQUIRED,

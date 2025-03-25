@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace Drupal\SwsDrush\Drush\Commands;
 
+use Composer\Console\Input\InputOption;
 use Drush\Attributes as CLI;
 use Drush\Commands\DrushCommands;
 use Symfony\Component\Yaml\Yaml;
@@ -20,11 +21,13 @@ final class MultisiteCommands extends DrushCommands {
    */
   #[CLI\Command(name: 'multisite')]
   #[CLI\Argument(name: 'site_name', description: 'Machine name of the multisite.')]
-  #[CLI\Option(name: 'update-drush-config', description: 'Flag to update the drush/drush.yml with the new multisite name.')]
-  #[CLI\Usage(name: 'New site and update drush config:', description: 'drush multisite foobar --update-drush-config')]
+  #[CLI\Option(name: 'no-update-drush', description: 'Flag to disable update the drush/drush.yml with the new multisite name.')]
+  #[CLI\Usage(name: 'drush multisite foobar', description: 'New site and updates to drush config')]
+  #[CLI\Usage(name: 'drush multisite foobar --no-update-drush', description: 'New site and no update to drush config')]
   public function newMultisite(string $site_name, array $options = [
-    'update-drush-config' => false,
-  ]) {
+    'no-update-drush' => InputOption::VALUE_NEGATABLE,
+  ]
+  ) {
     $this->say("This will generate a new site in the docroot/sites directory.");
 
     $new_site_dir = $this->getDir() . '/docroot/sites/' . $site_name;
@@ -52,7 +55,7 @@ final class MultisiteCommands extends DrushCommands {
       $this->say("Drush aliases generated: @$site_name");
     }
 
-    if ($options['update-drush-config']) {
+    if ($options['no-update-drush'] !== TRUE) {
       $drush_config = Yaml::parseFile($this->getDir() . '/drush/drush.yml');
       $drush_config['command']['source']['build']['settings']['options']['multsites'][] = $site_name;
       file_put_contents($this->getDir() . '/drush/drush.yml', Yaml::dump($drush_config));

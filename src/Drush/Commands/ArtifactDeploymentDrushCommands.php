@@ -44,7 +44,7 @@ final class ArtifactDeploymentDrushCommands extends DrushCommands {
   #[CLI\Option(name: 'no-push', description: 'Do not push changes to VCS repository')]
   #[CLI\Option(name: 'post-build-script', description: 'Shell script to run after the build')]
   #[CLI\Option(name: 'artifact-dir', description: 'Directory to build the artifact')]
-  #[CLI\Usage(name: 'artifact:deploy', description: 'Usage description')]
+  #[CLI\Usage(name: 'artifact:deploy -n', description: 'Deploy code to the branch name using all default settings')]
   #[CLI\Help(description: 'The options can be configured in a drush.yml file and committed to the repository. See the example file for more information.')]
   public function buildCommand(
     $options = [
