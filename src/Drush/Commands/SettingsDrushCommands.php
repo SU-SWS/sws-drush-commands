@@ -4,7 +4,6 @@ declare(strict_types=1);
 
 namespace Drupal\SwsDrush\Drush\Commands;
 
-use Drush\Boot\DrupalBootLevels;
 use Drush\Utils\StringUtils;
 use Drush\Attributes as CLI;
 use Drush\Commands\DrushCommands;
@@ -12,8 +11,7 @@ use Drush\Commands\DrushCommands;
 /**
  * A Drush command file.
  */
-#[CLI\Bootstrap(DrupalBootLevels::NONE)]
-final class SettingsCommands extends DrushCommands {
+final class SettingsDrushCommands extends DrushCommands {
 
   use SwsCommandsTrait;
 

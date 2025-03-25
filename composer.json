@@ -24,12 +24,5 @@
         "psr-4": {
             "Drupal\\SwsDrush\\": "src/"
         }
-    },
-    "extra": {
-        "drush": {
-            "services": {
-                "drush.services.yml": "^11"
-            }
-        }
     }
 }

@@ -7,7 +7,6 @@ namespace Drupal\SwsDrush\Drush\Commands;
 use AcquiaCloudApi\Response\ApplicationResponse;
 use Drupal\SwsDrush\Helpers\AcquiaApi;
 use Drush\Attributes as CLI;
-use Drush\Boot\DrupalBootLevels;
 use Drush\Commands\DrushCommands;
 use Drush\Drush;
 use Symfony\Component\Console\Input\InputOption;
@@ -17,8 +16,7 @@ use Symfony\Component\Yaml\Yaml;
 /**
  * A Drush command file.
  */
-#[CLI\Bootstrap(DrupalBootLevels::NONE)]
-final class AliasesCommands extends DrushCommands {
+final class AliasesDrushCommands extends DrushCommands {
 
   use SwsCommandsTrait;
 
