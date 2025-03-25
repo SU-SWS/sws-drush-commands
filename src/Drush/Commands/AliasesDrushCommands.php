@@ -48,6 +48,7 @@ final class AliasesDrushCommands extends DrushCommands {
       ->getOption('alias-dir') ?: Path::join($bootstrap->getComposerRoot(), 'drush', 'sites');
 
     $this->acquiaApi = $this->getAcquiaApi();
+    $this->appId = $this->input()->getOption('app-id');
     $site = $this->acquiaApi->acquiaApplications->get($this->appId);
 
     $this->appId = $this->input()->getOption('app-id');
