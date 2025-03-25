@@ -4,7 +4,7 @@ declare(strict_types=1);
 
 namespace Drupal\SwsDrush\Drush\Commands;
 
-use Composer\Console\Input\InputOption;
+use Symfony\Component\Console\Input\InputOption;
 use Drush\Commands\DrushCommands;
 use Drush\Attributes as CLI;
 use Symfony\Component\Yaml\Yaml;
