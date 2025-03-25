@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace Drupal\SwsDrush\Drush\Commands;
 
+use Drupal\SwsDrush\Helpers\AcquiaApi;
 use Drupal\SwsDrush\Helpers\LocalMachineHelper;
 use Drupal\SwsDrush\Output\Checklist;
 use Drush\Drush;
@@ -64,6 +65,27 @@ trait SwsCommandsTrait {
     }
 
     $this->input->setOption($name, $value);
+  }
+
+  /**
+   * Get a API connection service object.
+   *
+   * @return \Drupal\SwsDrush\Helpers\AcquiaApi
+   *   API connection.
+   */
+  protected function getAcquiaApi(): AcquiaApi {
+    $this->ensureOption('app-id', fn() => $this->io()
+      ->ask('Acquia Application ID'), TRUE);
+    $this->ensureOption('app-key', fn() => $this->io()
+      ->ask('Acquia Application Key'), TRUE);
+    $this->ensureOption('app-secret', fn() => $this->io()
+      ->password('Acquia Application Secret'), TRUE);
+
+    $appId = $this->input()->getOption('app-id');
+    $appKey = $this->input()->getOption('app-key');
+    $appSecret = $this->input()->getOption('app-secret');
+
+    return new AcquiaApi($appId, $appKey, $appSecret);
   }
 
 }

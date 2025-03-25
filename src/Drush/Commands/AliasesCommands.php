@@ -50,21 +50,12 @@ final class AliasesCommands extends DrushCommands {
     $this->aliasDir = $this->input()
       ->getOption('alias-dir') ?: Path::join($bootstrap->getComposerRoot(), 'drush', 'sites');
 
-    $this->ensureOption('app-id', fn() => $this->io()
-      ->ask('Acquia Application ID'), TRUE);
-    $this->ensureOption('app-key', fn() => $this->io()
-      ->ask('Acquia Application Key'), TRUE);
-    $this->ensureOption('app-secret', fn() => $this->io()
-      ->password('Acquia Application Secret'), TRUE);
-
-    $this->appId = $this->input()->getOption('app-id');
-    $appKey = $this->input()->getOption('app-key');
-    $appSecret = $this->input()->getOption('app-secret');
-
-    // Build alias files.
-    $this->acquiaApi = new AcquiaApi($this->appId, $appKey, $appSecret);
+    $this->acquiaApi = $this->getAcquiaApi();
     $site = $this->acquiaApi->acquiaApplications->get($this->appId);
 
+    $this->appId = $this->input()->getOption('app-id');
+
+    // Build alias files.
     $this->getSiteAliases($site);
   }
 

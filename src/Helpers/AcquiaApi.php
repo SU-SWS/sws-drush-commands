@@ -121,28 +121,24 @@ final class AcquiaApi {
    * Tests CloudAPI client authentication credentials.
    */
   protected function setCloudApiClient() {
-    try {
-      $connector = new Connector([
-        'key' => $this->appKey,
-        'secret' => $this->appSecret,
-      ]);
-      $this->acquiaApi  = Client::factory($connector);
+    $connector = new Connector([
+      'key' => $this->appKey,
+      'secret' => $this->appSecret,
+    ]);
+    $this->acquiaApi = Client::factory($connector);
 
-      $this->acquiaApplications = new Applications($this->acquiaApi);
-      $this->acquiaEnvironments = new Environments($this->acquiaApi);
-      $this->acquiaServers = new Servers($this->acquiaApi);
-      $this->acquiaDatabases = new Databases($this->acquiaApi);
-      $this->acquiaDatabaseBackups = new DatabaseBackups($this->acquiaApi);
-      $this->acquiaDomains = new Domains($this->acquiaApi);
-      $this->acquiaCertificates = new SslCertificates($this->acquiaApi);
-      $this->acquiaNotifications = new Notifications($this->acquiaApi);
+    $this->acquiaApplications = new Applications($this->acquiaApi);
+    $this->acquiaEnvironments = new Environments($this->acquiaApi);
+    $this->acquiaServers = new Servers($this->acquiaApi);
+    $this->acquiaDatabases = new Databases($this->acquiaApi);
+    $this->acquiaDatabaseBackups = new DatabaseBackups($this->acquiaApi);
+    $this->acquiaDomains = new Domains($this->acquiaApi);
+    $this->acquiaCertificates = new SslCertificates($this->acquiaApi);
+    $this->acquiaNotifications = new Notifications($this->acquiaApi);
+  }
 
-      // We must call some method on the client to test authentication.
-      $this->acquiaApplications->getAll();
-    }
-    catch (\Exception $e) {
-      throw new \Exception("Unknown exception while connecting to Acquia Cloud: " . $e->getMessage());
-    }
+  public function renewToken() {
+    $this->setCloudApiClient();
   }
 
 }

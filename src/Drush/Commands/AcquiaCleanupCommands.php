@@ -16,9 +16,91 @@ final class AcquiaCleanupCommands extends DrushCommands {
 
   use SwsCommandsTrait;
 
+  /**
+   * Delete on-demand database backups that are old.
+   */
   #[CLI\Command(name: 'acquia:clean-databases')]
-  public function cleanOldDatabases() {}
+  #[CLI\Option(name: 'app-id', description: 'Acquia application ID')]
+  #[CLI\Option(name: 'app-key', description: 'Acquia API key')]
+  #[CLI\Option(name: 'app-secret', description: 'Acquia API secret')]
+  #[CLI\Option(name: 'minimum-age', description: 'Minimum age in seconds from the current time.')]
+  #[CLI\Option(name: 'environment', description: 'Acquia environment(s) to clean. Multiple environments use --environment=dev --environment=stage')]
+  public function cleanOldDatabases(array $options = [
+    'app-id' => InputOption::VALUE_REQUIRED,
+    'app-key' => InputOption::VALUE_REQUIRED,
+    'app-secret' => InputOption::VALUE_REQUIRED,
+    'minimum-age' => 604800,
+    'environment' => ['dev', 'stage', 'prod'],
+  ]
+  ): void {
+    $acquiaApi = $this->getAcquiaApi();
+    $appId = $this->input()->getOption('app-id');
 
+    $application = $acquiaApi->acquiaApplications->get($appId);
+    if ($application->hosting->type == 'acsf') {
+      throw new \Exception('ACSF Applications are not supported. Only single applications (ACE, ACN) are supported.');
+    }
+
+    $environments = $this->safelyRunAcquiaRequest($acquiaApi, [
+      $acquiaApi->acquiaEnvironments,
+      'getAll',
+    ], $appId);
+    $environments = array_filter((array) $environments, fn($env) => in_array($env->name, $options['environment']));
+
+    $environment_uuids = [];
+    foreach ($environments as $environment) {
+      $environment_uuids[$environment->uuid] = $environment->name;
+    }
+
+    $databases = $acquiaApi->acquiaDatabases->getNames($appId);
+    foreach ($databases as $database) {
+      $this->say(sprintf('Gather database backup info for %s', $database->name));
+
+      foreach ($environment_uuids as $environment_uuid => $name) {
+        $backups = $this->safelyRunAcquiaRequest($acquiaApi, [
+          $acquiaApi->acquiaDatabaseBackups,
+          'getAll',
+        ], $environment_uuid, $database->name);
+
+        foreach ($backups as $backup) {
+          $start_at = strtotime($backup->startedAt);
+
+          if ($backup->type == 'ondemand' && time() - $start_at > $options['minimum-age']) {
+            $this->say(sprintf('Deleting %s backup #%s on %s environment.', $database->name, $backup->id, $name));
+
+            $this->safelyRunAcquiaRequest($acquiaApi, [
+              $acquiaApi->acquiaDatabaseBackups,
+              'delete',
+            ], $environment_uuid, $database->name, $backup->id);
+          }
+        }
+      }
+    }
+  }
+
+  /**
+   * Run an acquia api request, renew the token, and rerun if something fails.
+   *
+   * @param \Drupal\SwsDrush\Helpers\AcquiaApi $acquiaApi
+   * @param callable $callable
+   * @param ...$args
+   *
+   * @return mixed
+   */
+  protected function safelyRunAcquiaRequest(AcquiaApi $acquiaApi, callable $callable, ...$args): mixed {
+    try {
+      return $callable(...$args);
+    }
+    catch (\Exception $e) {
+      $this->yell($e->getMessage(), 40, 'red');
+      $acquiaApi->renewToken();
+      return $callable(...$args);
+    }
+  }
+
+  /**
+   * Delete git branches and tags that are not currently deployed on Acquia.
+   */
   #[CLI\Command(name: 'acquia:clean-git')]
   #[CLI\Option(name: 'app-id', description: 'Acquia application ID')]
   #[CLI\Option(name: 'app-key', description: 'Acquia API key')]
@@ -28,19 +110,9 @@ final class AcquiaCleanupCommands extends DrushCommands {
     'app-key' => InputOption::VALUE_REQUIRED,
     'app-secret' => InputOption::VALUE_REQUIRED,
   ]
-  ) {
-    $this->ensureOption('app-id', fn() => $this->io()
-      ->ask('Acquia Application ID'), TRUE);
-    $this->ensureOption('app-key', fn() => $this->io()
-      ->ask('Acquia Application Key'), TRUE);
-    $this->ensureOption('app-secret', fn() => $this->io()
-      ->password('Acquia Application Secret'), TRUE);
-
+  ): void {
+    $acquiaApi = $this->getAcquiaApi();
     $appId = $this->input()->getOption('app-id');
-    $appKey = $this->input()->getOption('app-key');
-    $appSecret = $this->input()->getOption('app-secret');
-
-    $acquiaApi = new AcquiaApi($appId, $appKey, $appSecret);
 
     $active_branches = ['master', 'HEAD'];
     $active_tags = [];
