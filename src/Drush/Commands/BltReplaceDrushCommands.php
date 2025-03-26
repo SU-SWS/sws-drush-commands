@@ -86,6 +86,23 @@ final class BltReplaceDrushCommands extends DrushCommands {
     $file_system->copy(__DIR__ . '/../../../settings/deploy-cleanup.sh', $this->getDir() . '/drush/deploy-cleanup.sh');
 
     $file_system->chmod($this->getDir() . '/drush/deploy-cleanup.sh', 0777);
+
+    if ($file_system->exists($this->getDir() . '/.circleci/config.yml')) {
+      $circleCiConfig = file_get_contents($this->getDir() . '/.circleci/config.yml');
+      if (str_contains($circleCiConfig, 'blt ')) {
+        $this->say('Be sure to update CircleCi Config.');
+      }
+    }
+
+    $githubWorkflows = glob($this->getDir() . '/.github/workflows/*.yml');
+    foreach ($githubWorkflows as $workflow) {
+      $workflowConfig = file_get_contents($workflow);
+      if (str_contains($workflowConfig, 'blt ')) {
+        $this->say('Be sure to update Github Actions Config: ' . basename($workflow));
+      }
+    }
+
+    $this->say("Be sure to update any Acquia hooks in {$this->getDir()}/hooks");
   }
 
   /**
