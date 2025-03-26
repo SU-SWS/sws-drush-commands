@@ -7,6 +7,7 @@ namespace Drupal\SwsDrush\Drush\Commands;
 use Drupal\SwsDrush\Output\Checklist;
 use Drush\Commands\DrushCommands;
 use Drush\Attributes as CLI;
+use Symfony\Component\Console\Input\InputOption;
 
 /**
  * A Drush command file.
@@ -76,6 +77,7 @@ final class SyncDrushCommands extends DrushCommands {
       throw new \Exception('Failed to update database: ' . $result->getErrorOutput());
     }
   }
+
   /**
    * @param \Closure $outputCallback
    *   Output callback.
@@ -95,6 +97,7 @@ final class SyncDrushCommands extends DrushCommands {
       throw new \Exception('Failed to update database: ' . $result->getErrorOutput());
     }
   }
+
   /**
    * @param \Closure $outputCallback
    *   Output callback.
@@ -130,13 +133,14 @@ final class SyncDrushCommands extends DrushCommands {
         'drush',
         "@$site_name.local",
         'deploy:hook',
-        '-y'
+        '-y',
       ], $outputCallback, $this->getDir());
     }
     if (!$result->isSuccessful()) {
       throw new \Exception('Failed to update database: ' . $result->getErrorOutput());
     }
   }
+
   /**
    * @param \Closure $outputCallback
    *   Output callback.
@@ -174,8 +178,34 @@ final class SyncDrushCommands extends DrushCommands {
   /**
    * Sync key secret files.
    */
-  #[CLI\Command(name: 'sync-keys')]
-  public function syncKeys() {}
+  #[CLI\Command(name: 'sync-keys', aliases: ['keys'])]
+  #[CLI\Option(name: 'sync-ssh', description: 'Sync SSH string')]
+  #[CLI\Option(name: 'sync-files', description: 'Files to sync. Use "--sync-files=foo --sync=bar" for multiple.')]
+  public function syncKeys(array $options = [
+    'sync-ssh' => InputOption::VALUE_REQUIRED,
+    'sync-files' => [InputOption::VALUE_IS_ARRAY, InputOption::VALUE_REQUIRED],
+  ]
+  ) {
+    $this->ensureOption('sync-ssh', fn() => $this->io()->ask('SSH string'), true);
+    $this->ensureOption('sync-files', fn() => $this->io()->ask('File to sync'), true);
+
+    $this->localMachineHelper()->checkRequiredBinariesExist(['rsync']);
+
+    $file_system = $this->localMachineHelper()->getFilesystem();
+    $file_system->mkdir($this->getDir() . '/keys');
+
+    $ssh_url = $this->input()->getOption('sync-ssh');
+    $files = $this->input()->getOption('sync-files');
+
+    foreach ($files as &$file) {
+      $file = ":$file";
+    }
+    $rsync_files = $ssh_url . implode(' ', $files);
+
+    $command = "rsync --recursive --exclude .git --exclude .svn --exclude .hg --verbose --progress $rsync_files " . $this->getDir() . '/keys';
+    $this->localMachineHelper()
+      ->executeFromCmd($command, NULL, $this->getDir());
+  }
 
   /**
    * Sync public and private files from prod site.

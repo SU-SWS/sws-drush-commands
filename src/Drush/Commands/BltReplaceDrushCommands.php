@@ -27,6 +27,10 @@ final class BltReplaceDrushCommands extends DrushCommands {
     'app-secret' => InputOption::VALUE_OPTIONAL,
   ]
   ) {
+    if ($options['app-key'] != InputOption::VALUE_OPTIONAL || $options['app-secret'] != InputOption::VALUE_OPTIONAL) {
+      $this->checkLocalAcquiaApiKeys();
+    }
+
     $this->ensureOption('app-key', fn() => $this->io()
       ->ask('Acquia Application API Key'));
     $this->ensureOption('app-secret', fn() => $this->io()
@@ -39,6 +43,9 @@ final class BltReplaceDrushCommands extends DrushCommands {
     $gitUrl = $this->getBltConfig('git.remotes', []);
     $appId = $this->getBltConfig('cloud.appId');
     $deployGitIgnore = $this->getBltConfig('deploy.gitignore_file');
+    $rsyncSsh = $this->getBltConfig('keys_rsync.ssh');
+    $rsyncFiles = explode("\n", $this->getBltConfig('keys_rsync.files', ''));
+
     $appKey = $this->input->getOption('app-key');
     $appSecret = $this->input->getOption('app-secret');
 
@@ -62,16 +69,49 @@ final class BltReplaceDrushCommands extends DrushCommands {
     $local_drush_config['command']['acquia']['clean-databases']['options']['app-key'] = $appKey;
     $local_drush_config['command']['acquia']['clean-databases']['options']['app-secret'] = $appSecret;
 
+    if ($rsyncSsh) {
+      $drush_config['command']['sync-keys']['options']['sync-ssh'] = $rsyncSsh;
+      $drush_config['command']['sync-keys']['options']['sync-files'] = $rsyncFiles;
+    }
+
+    $drush_config['drush']['paths']['config'][] = 'drush/local.drush.yml';
+
     $this->localMachineHelper()
       ->writeFile($this->getDir() . '/drush/drush.yml', Yaml::dump($drush_config));
     $this->localMachineHelper()
       ->writeFile($this->getDir() . '/drush/local.drush.yml', Yaml::dump($local_drush_config));
 
     $file_system->copy($deployGitIgnore, $this->getDir() . '/drush/deploy.gitignore');
-    $file_system->copy(__DIR__ . '/../../../settings/deploy.gitignore', $this->getDir(). '/drush/deploy.gitignore');
-    $file_system->copy(__DIR__ . '/../../../settings/deploy-cleanup.sh', $this->getDir(). '/drush/deploy-cleanup.sh');
+    $file_system->copy(__DIR__ . '/../../../settings/deploy.gitignore', $this->getDir() . '/drush/deploy.gitignore');
+    $file_system->copy(__DIR__ . '/../../../settings/deploy-cleanup.sh', $this->getDir() . '/drush/deploy-cleanup.sh');
 
-    $file_system->chmod($this->getDir(). '/drush/deploy-cleanup.sh', 0777);
+    $file_system->chmod($this->getDir() . '/drush/deploy-cleanup.sh', 0777);
+  }
+
+  /**
+   * Try to set input options from the cloud api conf.
+   */
+  public function checkLocalAcquiaApiKeys(): void {
+    $file_system = $this->localMachineHelper()->getFilesystem();
+    $cloud_api_conf = $_SERVER['HOME'] . '/.acquia/cloud_api.conf';
+    if (!$file_system->exists($cloud_api_conf)) {
+      return;
+    }
+
+    $cloud_conf = json_decode(file_get_contents($cloud_api_conf), TRUE, 512, JSON_THROW_ON_ERROR);
+    if (isset($cloud_conf['key']) && isset($cloud_conf['secret'])) {
+      $this->input()->setOption('app-key', $cloud_conf['key']);
+      $this->input()->setOption('app-secret', $cloud_conf['secret']);
+      return;
+    }
+
+    if (isset($cloud_conf['acli_key']) && isset($cloud_conf['keys'])) {
+      $apiKey = $cloud_conf['acli_key'];
+      $apiSecret = $cloud_conf['keys']->$apiKey->secret;
+
+      $this->input()->setOption('app-key', $apiKey);
+      $this->input()->setOption('app-secret', $apiSecret);
+    }
   }
 
   /**
