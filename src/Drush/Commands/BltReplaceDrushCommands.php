@@ -60,18 +60,11 @@ final class BltReplaceDrushCommands extends DrushCommands {
     $drush_config['command']['artifact']['deploy']['options']['post-build-script'] = 'drush/deploy-cleanup.sh';
     $drush_config['command']['artifact']['deploy']['options']['artifact-dir'] = 'deploy';
 
-    $drush_config['command']['site']['alias-build']['options']['app-id'] = $appId;
-    $local_drush_config['command']['site']['alias-build']['options']['app-key'] = $appKey;
-    $local_drush_config['command']['site']['alias-build']['options']['app-secret'] = $appSecret;
-    $drush_config['command']['site']['alias-build']['options']['alias-dir'] = 'drush/sites';
+    $drush_config['command']['acquia']['alias-build']['options']['alias-dir'] = 'drush/sites';
+    $drush_config['command']['acquia']['options']['app-id'] = $appId;
 
-    $drush_config['command']['acquia']['clean-git']['options']['app-id'] = $appId;
-    $local_drush_config['command']['acquia']['clean-git']['options']['app-key'] = $appKey;
-    $local_drush_config['command']['acquia']['clean-git']['options']['app-secret'] = $appSecret;
-
-    $drush_config['command']['acquia']['clean-databases']['options']['app-id'] = $appId;
-    $local_drush_config['command']['acquia']['clean-databases']['options']['app-key'] = $appKey;
-    $local_drush_config['command']['acquia']['clean-databases']['options']['app-secret'] = $appSecret;
+    $local_drush_config['command']['acquia']['options']['app-key'] = $appKey;
+    $local_drush_config['command']['acquia']['options']['app-secret'] = $appSecret;
 
     if ($rsyncSsh) {
       $drush_config['command']['sync-keys']['options']['sync-ssh'] = $rsyncSsh;
@@ -79,8 +72,7 @@ final class BltReplaceDrushCommands extends DrushCommands {
     }
 
     if ($multisites) {
-      $drush_config['command']['source']['build']['settings']['options']['multisites'] = $multisites;
-      $drush_config['command']['multisite']['update']['options']['multisites'] = $multisites;
+      $drush_config['command']['multisite']['options']['multisites'] = $multisites;
     }
 
     $drush_config['drush']['paths']['config'][] = 'drush/local.drush.yml';

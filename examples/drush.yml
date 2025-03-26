@@ -6,13 +6,20 @@ command:
           - foobar@github.com
         post-build-script: script-path.sh
         artifact-dir: deploy
-  site:
+  acquia:
+    options:
+      app-id: acquia-app-id
+      app-key: key
+      app-secret: secret
     alias-build:
       options:
-        app-id: acquia-app-id
-        app-key: key
-        app-secret: secret
         alias-dir: drush/sites
+  sync-keys:
+    options:
+      sync-ssh: sshUrl
+      sync-files:
+        - /path/to/directory
+        - /path/to/file.php
   source:
     build:
       settings:
