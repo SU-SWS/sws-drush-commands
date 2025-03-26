@@ -45,6 +45,7 @@ final class BltReplaceDrushCommands extends DrushCommands {
     $gitUrl = $this->getBltConfig('git.remotes', []);
     $appId = $this->getBltConfig('cloud.appId');
     $deployGitIgnore = $this->getBltConfig('deploy.gitignore_file');
+    $multisites = array_filter(explode("\n", $this->getBltConfig('multisites', '')));
 
     $rsyncSsh = $this->getBltConfig('keys_rsync.ssh');
     $rsyncFiles = explode("\n", $this->getBltConfig('keys_rsync.files', ''));
@@ -75,6 +76,11 @@ final class BltReplaceDrushCommands extends DrushCommands {
     if ($rsyncSsh) {
       $drush_config['command']['sync-keys']['options']['sync-ssh'] = $rsyncSsh;
       $drush_config['command']['sync-keys']['options']['sync-files'] = $rsyncFiles;
+    }
+
+    if ($multisites) {
+      $drush_config['command']['source']['build']['settings']['options']['multisites'] = $multisites;
+      $drush_config['command']['multisite']['update']['options']['multisites'] = $multisites;
     }
 
     $drush_config['drush']['paths']['config'][] = 'drush/local.drush.yml';
