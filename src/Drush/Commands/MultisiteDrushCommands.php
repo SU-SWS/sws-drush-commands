@@ -51,14 +51,14 @@ final class MultisiteDrushCommands extends DrushCommands {
       foreach ($new_alias as &$alias) {
         $alias['uri'] = $site_name;
       }
-      file_put_contents($this->getDir() . "/drush/sites/$site_name.site.yml", Yaml::dump($new_alias));
+      file_put_contents($this->getDir() . "/drush/sites/$site_name.site.yml", Yaml::dump($new_alias, 99, 2));
       $this->say("Drush aliases generated: @$site_name");
     }
 
     if ($options['no-update-drush'] !== TRUE) {
       $drush_config = Yaml::parseFile($this->getDir() . '/drush/drush.yml');
       $drush_config['command']['source']['build']['settings']['options']['multsites'][] = $site_name;
-      file_put_contents($this->getDir() . '/drush/drush.yml', Yaml::dump($drush_config));
+      file_put_contents($this->getDir() . '/drush/drush.yml', Yaml::dump($drush_config, 99, 2));
     }
   }
 

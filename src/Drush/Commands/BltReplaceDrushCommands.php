@@ -43,6 +43,7 @@ final class BltReplaceDrushCommands extends DrushCommands {
     $gitUrl = $this->getBltConfig('git.remotes', []);
     $appId = $this->getBltConfig('cloud.appId');
     $deployGitIgnore = $this->getBltConfig('deploy.gitignore_file');
+
     $rsyncSsh = $this->getBltConfig('keys_rsync.ssh');
     $rsyncFiles = explode("\n", $this->getBltConfig('keys_rsync.files', ''));
 
@@ -77,9 +78,9 @@ final class BltReplaceDrushCommands extends DrushCommands {
     $drush_config['drush']['paths']['config'][] = 'drush/local.drush.yml';
 
     $this->localMachineHelper()
-      ->writeFile($this->getDir() . '/drush/drush.yml', Yaml::dump($drush_config));
+      ->writeFile($this->getDir() . '/drush/drush.yml', Yaml::dump($drush_config, 99, 2));
     $this->localMachineHelper()
-      ->writeFile($this->getDir() . '/drush/local.drush.yml', Yaml::dump($local_drush_config));
+      ->writeFile($this->getDir() . '/drush/local.drush.yml', Yaml::dump($local_drush_config, 99, 2));
 
     $file_system->copy($deployGitIgnore, $this->getDir() . '/drush/deploy.gitignore');
     $file_system->copy(__DIR__ . '/../../../settings/deploy.gitignore', $this->getDir() . '/drush/deploy.gitignore');
@@ -147,8 +148,8 @@ final class BltReplaceDrushCommands extends DrushCommands {
       'blt',
       'blt:config:get',
       $config_name,
-    ]);
-    return $result->isSuccessful() ? $result->getOutput() : $default;
+    ], NULL, $this->getDir(), FALSE);
+    return $result->isSuccessful() ? preg_replace('/\n$/', '', $result->getOutput()) : $default;
   }
 
   /**

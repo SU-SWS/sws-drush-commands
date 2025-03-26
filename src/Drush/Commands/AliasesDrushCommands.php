@@ -242,7 +242,7 @@ final class AliasesDrushCommands extends DrushCommands {
     }
     $filePath = $this->aliasDir . '/' . $site_id . '.site.yml';
 
-    file_put_contents($filePath, Yaml::dump($aliases));
+    file_put_contents($filePath, Yaml::dump($aliases, 99, 2));
     return $filePath;
   }
 
