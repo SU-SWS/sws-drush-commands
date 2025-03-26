@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace Drupal\SwsDrush\Drush\Commands;
 
+use Drush\Boot\DrupalBootLevels;
 use Symfony\Component\Console\Input\InputOption;
 use Drush\Attributes as CLI;
 use Drush\Commands\DrushCommands;
@@ -12,6 +13,7 @@ use Symfony\Component\Yaml\Yaml;
 /**
  * A Drush command file.
  */
+#[CLI\Bootstrap(DrupalBootLevels::NONE)]
 final class MultisiteDrushCommands extends DrushCommands {
 
   use SwsCommandsTrait;
@@ -60,6 +62,101 @@ final class MultisiteDrushCommands extends DrushCommands {
       $drush_config['command']['source']['build']['settings']['options']['multsites'][] = $site_name;
       file_put_contents($this->getDir() . '/drush/drush.yml', Yaml::dump($drush_config, 99, 2));
     }
+  }
+
+  /**
+   * Run database and config updates on all multisites.
+   */
+  #[CLI\Command(name: 'multisite:update')]
+  #[CLI\Option(name: 'multisites', description: 'List of sites to update')]
+  #[CLI\Option(name: 'partial', description: 'Import config with --partial flag.')]
+  public function updateSites(array $options = [
+    'multisites' => ['default'],
+    'partial' => FALSE,
+  ]
+  ) {
+    $errors = [];
+    $multisites = $this->input()->getOption('multisites');
+    foreach ($multisites as $site) {
+      if (!$options['partial']) {
+        $result = $this->localMachineHelper()->execute([
+          'drush',
+          '@self',
+          'deploy',
+          "-l $site",
+        ], NULL, $this->getDir());
+      }
+      else {
+        $result = $this->localMachineHelper()->execute([
+          'drush',
+          '@self',
+          'updb',
+          '-y',
+          "-l $site",
+        ], NULL, $this->getDir());
+        if ($result->isSuccessful()) {
+          $result = $this->localMachineHelper()->execute([
+            'drush',
+            '@self',
+            'config:import',
+            '-y',
+            "-l $site",
+          ], NULL, $this->getDir());
+          if ($result->isSuccessful()) {
+            $result = $this->localMachineHelper()->execute([
+              'drush',
+              '@self',
+              'deploy:hook',
+              '-y',
+              "-l $site",
+            ], NULL, $this->getDir());
+          }
+        }
+      }
+      if (!$result->isSuccessful()) {
+        $errors[] = $site;
+      }
+    }
+    if ($errors) {
+      throw new \Exception('Failed to update sites: ' . implode(', ', $errors));
+    }
+    $this->say(sprintf('Successfully updated %s sites', count($multisites)));
+  }
+
+  /**
+   * Run database and config updates on all multisites.
+   */
+  #[CLI\Command(name: 'multisite:update-parallel')]
+  #[CLI\Option(name: 'multisites', description: 'List of sites to update')]
+  #[CLI\Option(name: 'partial', description: 'Import config with --partial flag.')]
+  public function updateSitesParallel(array $options = [
+    'multisites' => ['default'],
+    'partial' => FALSE,
+  ]
+  ) {
+    $parallel_executions = (int) getenv('UPDATE_PARALLEL_PROCESSES') ?: 10;
+    $multisites = $this->input()->getOption('multisites');
+
+    $i = 0;
+    while ($multisites) {
+      $site = array_splice($multisites, 0, 1);
+      $site_chunks[$i][] = reset($site);
+      $i++;
+      if ($i >= $parallel_executions) {
+        $i = 0;
+      }
+    }
+
+    $commands = [];
+    foreach ($site_chunks as $sites) {
+      $command = 'drush multisite:update --multisites=' . implode(' --multisites=', $sites);
+      if ($options['partial']) {
+        $command .= ' --partial';
+      }
+      $commands[] = $command;
+    }
+    return $this->localMachineHelper()
+      ->executeFromCmd(implode(' & ', $commands));
   }
 
 }
