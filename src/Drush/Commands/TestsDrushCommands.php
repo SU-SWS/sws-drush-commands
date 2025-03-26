@@ -8,6 +8,7 @@ use Drush\Boot\DrupalBootLevels;
 use Symfony\Component\Console\Input\InputOption;
 use Drush\Attributes as CLI;
 use Drush\Commands\DrushCommands;
+use Symfony\Component\Filesystem\Path;
 
 /**
  * A Drush command file.
@@ -57,7 +58,8 @@ final class TestsDrushCommands extends DrushCommands {
 
       $this->ensureOption('clover-file', fn() => $this->io()
         ->ask('Path to clover file.'), TRUE);
-      $this->uploadCoverageCodeClimate($this->input()->getOption('clover-file'));
+      $this->uploadCoverageCodeClimate($this->input()
+        ->getOption('clover-file'));
     }
   }
 
@@ -71,19 +73,113 @@ final class TestsDrushCommands extends DrushCommands {
       throw new \Exception('No coverage to upload to code climate.');
     }
 
-    $repo = $this->getConfigValue('repo.root');
-    $this->localMachineHelper()->execute([
-      'curl',
-      '-L',
-      'https://codeclimate.com/downloads/test-reporter/test-reporter-latest-linux-amd64 > ./cc-test-reporter'
-    ],NULL, $this->dir, FALSE);
+    $this->localMachineHelper()
+      ->executeFromCmd('curl -L https://codeclimate.com/downloads/test-reporter/test-reporter-latest-linux-amd64 > ./cc-test-reporter', NULL, $this->dir, FALSE);
 
-    $this->localMachineHelper()->execute('chmod +x ./cc-test-reporter',NULL, $this->dir, FALSE);
+    $this->localMachineHelper()
+      ->executeFromCmd('chmod +x ./cc-test-reporter', NULL, $this->dir, FALSE);
 
-    copy($coverage_file, $this->dir. '/clover.xml');
-    $result = $this->localMachineHelper()->execute('./cc-test-reporter after-build -t clover',NULL, $this->dir, FALSE);
-    if(!$result->isSuccessful()){
+    copy($coverage_file, $this->dir . '/clover.xml');
+    $result = $this->localMachineHelper()
+      ->executeFromCmd('./cc-test-reporter after-build -t clover', NULL, $this->dir, FALSE);
+    if (!$result->isSuccessful()) {
       throw new \Exception('Failed to upload coverage report.');
+    }
+  }
+
+  /**
+   * Scaffold and prep phpunit tests.
+   */
+  #[CLI\Command(name: 'source:tests:phpunit')]
+  #[CLI\Option(name: 'db-user', description: 'Database user name')]
+  #[CLI\Option(name: 'db-pass', description: 'Database password')]
+  #[CLI\Option(name: 'db-host', description: 'Database host')]
+  #[CLI\Option(name: 'db-name', description: 'Database name')]
+  public function phpUnit(array $options = [
+    'db-user' => 'root',
+    'db-pass' => 'password',
+    'db-host' => 'localhost',
+    'db-name' => 'drupal',
+  ]
+  ) {
+    $dbUser = $this->input()->getOption('db-user');
+    $dbPass = $this->input()->getOption('db-pass');
+    $dbHost = $this->input()->getOption('db-host');
+    $dbName = $this->input()->getOption('db-name');
+
+    $fileSystem = $this->localMachineHelper()->getFilesystem();
+    if ($fileSystem->exists($this->getDir() . '/tests/phpunit/example.phpunit.xml')) {
+      $fileSystem->copy($this->getDir() . '/tests/phpunit/example.phpunit.xml', $this->getDir() . '/docroot/core/phpunit.xml');
+    }
+    else {
+      $fileSystem->copy(__DIR__ . '/../../../settings/example.phpunit.xml', $this->getDir() . '/docroot/core/phpunit.xml');
+    }
+    $contents = file_get_contents($this->getDir() . '/docroot/core/phpunit.xml');
+    $contents = str_replace('${drupal.db.username}', $dbUser, $contents);
+    $contents = str_replace('${drupal.db.password}', $dbPass, $contents);
+    $contents = str_replace('${drupal.db.host}', $dbHost, $contents);
+    $contents = str_replace('${drupal.db.database}', $dbName, $contents);
+
+    file_put_contents($this->getDir() . '/docroot/core/phpunit.xml', $contents);
+
+    $this->localMachineHelper()
+      ->executeFromCmd('../vendor/bin/phpunit --configuration=core --filter="/(Unit|Kernel)/" --testsuite=stanford', NULL, $this->getDir() . '/docroot/');
+  }
+
+  /**
+   * Prep and run codeception tests.
+   */
+  #[CLI\Command(name: 'codeception')]
+  #[CLI\Option(name: 'site-domain', description: 'Local site domain for testing.')]
+  #[CLI\Option(name: 'protocol', description: 'Domain protocol: http or https.')]
+  #[CLI\Option(name: 'suite', description: 'Codeception suite to run.')]
+  #[CLI\Option(name: 'group', description: 'Codeception group to run.')]
+  #[CLI\Option(name: 'test-dir', description: 'A path to codeception tests if not in the `tests` directory.')]
+  public function codeception(array $options = [
+    'site-domain' => 'localhost',
+    'protocol' => 'http',
+    'suite' => 'acceptance',
+    'group' => NULL,
+    'test-dir' => NULL,
+  ]
+  ) {
+    $fileSystem = $this->localMachineHelper()->getFilesystem();
+    $symLinkDir = NULL;
+    if ($options['test-dir']) {
+      $testDir = Path::join($this->getDir(), $options['test-dir'], $options['suite']);
+      if (!$fileSystem->exists($testDir)) {
+        throw new \Exception('Test directory does not exist: ' . $testDir);
+      }
+      $symLinkDir = Path::join($this->getDir(), 'tests', 'codeception', $options['suite'], 'temp');
+      $fileSystem->symlink($testDir, $symLinkDir);
+    }
+
+    $domain = $this->input()->getOption('site-domain');
+    $protocol = $this->input()->getOption('protocol');
+
+    if ($fileSystem->exists($this->getDir() . '/tests/codeception.dist.yml')) {
+      $fileSystem->copy($this->getDir() . '/tests/codeception.dist.yml', $this->getDir() . '/tests/codeception.yml');
+    }
+    $contents = file_get_contents($this->getDir() . '/tests/codeception.yml');
+    $contents = str_replace('${docroot}', $this->getDir() . '/docroot', $contents);
+    $contents = str_replace('${project.local.hostname}', $domain, $contents);
+    $contents = str_replace('${repo.root}', $this->getDir(), $contents);
+    $contents = str_replace('${project.local.protocol}', $protocol, $contents);
+    file_put_contents($this->getDir() . '/tests/codeception.yml', $contents);
+
+    $command = "vendor/bin/codecept run {$options['suite']} --steps --config=tests --html";
+    if ($options['group']) {
+      $command .= " --group={$options['group']}";
+    }
+
+    $result = $this->localMachineHelper()
+      ->executeFromCmd($command, NULL, $this->getDir());
+
+    if ($symLinkDir) {
+      $fileSystem->remove($symLinkDir);
+    }
+    if (!$result->isSuccessful()) {
+      throw new \Exception('Codeception failed');
     }
   }
 
