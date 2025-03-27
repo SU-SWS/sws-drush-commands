@@ -24,7 +24,7 @@ final class HooksDrushCommands extends DrushCommands {
     if (!$this->input()->getArgument('profile')) {
       $this->input()->setArgument('profile', [
         $this->getConfig()
-          ->get('command.site.install.profile') ?: 'stanford_profile',
+          ->get('project.profile') ?: 'stanford_profile',
       ]);
     }
   }
@@ -34,7 +34,6 @@ final class HooksDrushCommands extends DrushCommands {
    */
   #[CLI\Hook(type: 'post-command', target: 'site:install')]
   public function postSiteInstall() {
-    $this->localMachineHelper()->execute(['drush', 'cache:rebuild']);
     $this->localMachineHelper()->execute(['drush', 'cim', '-y']);
   }
 

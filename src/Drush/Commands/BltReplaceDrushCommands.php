@@ -4,10 +4,14 @@ declare(strict_types=1);
 
 namespace Drupal\SwsDrush\Drush\Commands;
 
+use Consolidation\Config\Config;
+use Consolidation\Config\Loader\ConfigProcessor;
 use Drush\Boot\DrupalBootLevels;
+use Drush\Config\Loader\YamlConfigLoader;
 use Symfony\Component\Console\Input\InputOption;
 use Drush\Commands\DrushCommands;
 use Drush\Attributes as CLI;
+use Symfony\Component\Filesystem\Path;
 use Symfony\Component\Yaml\Yaml;
 
 /**
@@ -69,7 +73,8 @@ final class BltReplaceDrushCommands extends DrushCommands {
     $local_drush_config['command']['sws']['options']['db-pass'] = $dbPass;
     $local_drush_config['command']['sws']['options']['db-name'] = $dbName;
 
-    $drush_config['command']['site']['install']['profile'] = $installProfile;
+    $drush_config['project']['profile'] = $installProfile;
+
     $drush_config['command']['sws']['options']['git-url'] = $gitUrl;
     $drush_config['command']['sws']['options']['post-build-script'] = 'drush/deploy-cleanup.sh';
     $drush_config['command']['sws']['options']['artifact-dir'] = 'deploy';
@@ -118,6 +123,28 @@ final class BltReplaceDrushCommands extends DrushCommands {
     }
 
     $this->say("Be sure to update any Acquia hooks in {$this->getDir()}/hooks");
+  }
+
+  /**
+   * After migration, update blt configs.
+   */
+  #[CLI\Hook(type: 'post-command', target: 'sws:migrate-blt')]
+  public function postBltMigrate() {
+    $bltConfigs = glob(Path::join($this->getDir(), 'docroot', 'sites', '*', 'blt.yml'));
+    foreach ($bltConfigs as $configFile) {
+      $config = new Config();
+      $loader = new YamlConfigLoader();
+      $processor = new ConfigProcessor();
+      $processor->extend($loader->load($configFile));
+      $config->replace($processor->export());
+      $profile = $config->get('project.profile.name');
+      $remoteAlias = $config->get('drush.aliases.remote');
+
+      $siteConfig = [
+        'site' => ['profile' => $profile, 'remote-alias' => $remoteAlias],
+      ];
+      file_put_contents(str_replace('blt.yml', 'sws.yml', $configFile), Yaml::dump($siteConfig, 99, 2));
+    }
   }
 
   /**

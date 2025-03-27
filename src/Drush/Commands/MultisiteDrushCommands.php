@@ -4,10 +4,14 @@ declare(strict_types=1);
 
 namespace Drupal\SwsDrush\Drush\Commands;
 
+use Consolidation\Config\Config;
+use Consolidation\Config\Loader\ConfigProcessor;
 use Drush\Boot\DrupalBootLevels;
+use Drush\Config\Loader\YamlConfigLoader;
 use Symfony\Component\Console\Input\InputOption;
 use Drush\Attributes as CLI;
 use Drush\Commands\DrushCommands;
+use Symfony\Component\Filesystem\Path;
 use Symfony\Component\Yaml\Yaml;
 
 /**
@@ -67,6 +71,42 @@ final class MultisiteDrushCommands extends DrushCommands {
       $drush_config['command']['sws']['options']['multisites'] = $options['multisites'];
 
       file_put_contents($this->getDir() . '/drush/drush.yml', Yaml::dump($drush_config, 99, 2));
+    }
+  }
+
+  /**
+   * Install Drupal.
+   */
+  #[CLI\Command(name: 'sws:multisite:install', aliases: [
+    'drupal:install',
+    'di',
+  ])]
+  #[CLI\Option(name: 'site', description: 'Machine name of site.')]
+  public function siteInstall(array $options = [
+    'site' => 'default',
+  ]
+  ) {
+    $defaultProfile = $this->getConfig()
+      ->get('project.profile') ?: 'stanford_profile';
+    $fileSystem = $this->localMachineHelper()->getFilesystem();
+    $siteConfig = Path::join($this->getDir(), 'docroot', 'sites', $options['site'], 'sws.yml');
+
+    if ($fileSystem->exists($siteConfig)) {
+      $config = new Config();
+      $loader = new YamlConfigLoader();
+      $processor = new ConfigProcessor();
+      $processor->extend($loader->load($siteConfig));
+      $config->replace($processor->export());
+      $profile = $config->get('site.profile');
+
+      $this->localMachineHelper()->execute([
+        'drush',
+        'site-install',
+        $profile ?: $defaultProfile,
+        "--uri={$options['site']}",
+        '-v',
+        '-y',
+      ], NULL, $this->getDir());
     }
   }
 
