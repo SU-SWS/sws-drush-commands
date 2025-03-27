@@ -34,7 +34,8 @@ final class HooksDrushCommands extends DrushCommands {
    */
   #[CLI\Hook(type: 'post-command', target: 'site:install')]
   public function postSiteInstall() {
-    $this->localMachineHelper()->execute(['drush', 'cim', '-y']);
+    $uri = $this->input()->getOption('uri');
+    $this->localMachineHelper()->execute(['drush', 'cim', "--uri=$uri", '-y']);
   }
 
 }
