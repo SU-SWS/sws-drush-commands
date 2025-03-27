@@ -42,6 +42,7 @@ final class ArtifactDeploymentDrushCommands extends DrushCommands {
   #[CLI\Option(name: 'git-url', description: 'Destination git repo url. Use multiple options for multiple urls. --git-url=foo --git-url=bar')]
   #[CLI\Option(name: 'branch', description: 'Destination branch name')]
   #[CLI\Option(name: 'tag', description: 'Destination Tag name')]
+  #[CLI\Option(name: 'commit-msg', description: 'Commit message string')]
   #[CLI\Option(name: 'no-sanitize', description: 'Do not sanitize the build artifact')]
   #[CLI\Option(name: 'no-push', description: 'Do not push changes to VCS repository')]
   #[CLI\Option(name: 'post-build-script', description: 'Shell script to run after the build')]
@@ -54,6 +55,7 @@ final class ArtifactDeploymentDrushCommands extends DrushCommands {
       'git-url' => [InputOption::VALUE_IS_ARRAY | InputOption::VALUE_REQUIRED],
       'branch' => InputOption::VALUE_OPTIONAL,
       'tag' => InputOption::VALUE_OPTIONAL,
+      'commit-msg' => NULL,
       'no-sanitize' => FALSE,
       'no-push' => FALSE,
       'post-build-script' => NULL,
@@ -123,7 +125,8 @@ final class ArtifactDeploymentDrushCommands extends DrushCommands {
 
     if ($options['post-build-script']) {
       $this->checklist->addItem('Running post-build script');
-      $process = $this->localmachineHelper()->executeFromCmd($options['post-build-script'], $outputCallback, $artifactDir, TRUE);
+      $process = $this->localmachineHelper()
+        ->executeFromCmd($options['post-build-script'], $outputCallback, $artifactDir, TRUE);
       if (!$process->isSuccessful()) {
         $this->io()->error($process->getCommandLine());
         $this->io()->error($process->getOutput());
@@ -133,7 +136,7 @@ final class ArtifactDeploymentDrushCommands extends DrushCommands {
     }
 
     $this->checklist->addItem("Committing changes (commit hash: $commitHash)");
-    $this->commit($outputCallback, $artifactDir, $commitHash, $this->destinationTag);
+    $this->commit($outputCallback, $artifactDir, $this->destinationTag);
     $this->checklist->completePreviousItem();
 
     if (!$options['no-push']) {
@@ -311,7 +314,8 @@ final class ArtifactDeploymentDrushCommands extends DrushCommands {
       $relativeDrupalDir . 'vendor',
     ];
     if (file_exists($this->composerJsonPath)) {
-      $composerJson = json_decode($this->localmachineHelper()->readFile($this->composerJsonPath), TRUE, 512, JSON_THROW_ON_ERROR);
+      $composerJson = json_decode($this->localmachineHelper()
+        ->readFile($this->composerJsonPath), TRUE, 512, JSON_THROW_ON_ERROR);
 
       foreach ($composerJson['extra']['installer-paths'] as $path => $type) {
         $path = str_replace('/{$name}', '', $path);
@@ -423,7 +427,7 @@ final class ArtifactDeploymentDrushCommands extends DrushCommands {
   /**
    * Commit the artifact.
    */
-  private function commit(\Closure $outputCallback, string $artifactDir, string $commitHash, ?string $tag = NULL): void {
+  private function commit(\Closure $outputCallback, string $artifactDir, ?string $tag = NULL): void {
     $outputCallback('out', 'Adding and committing changed files');
     $this->localmachineHelper()->checkRequiredBinariesExist(['git']);
     $process = $this->localmachineHelper()->execute(['git', 'add', '-A'],
@@ -448,7 +452,7 @@ final class ArtifactDeploymentDrushCommands extends DrushCommands {
         $this->io->warning("Unable to forcibly add $file to new branch");
       }
     }
-    $commitMessage = $this->generateCommitMessage($commitHash);
+    $commitMessage = $this->generateCommitMessage();
     $process = $this->localmachineHelper()->execute([
       'git',
       'commit',
@@ -485,9 +489,14 @@ final class ArtifactDeploymentDrushCommands extends DrushCommands {
     }
   }
 
-  private function generateCommitMessage(string $commitHash): array|string {
-    // TODO, get last commit message instead.
-    return "Automated commit by SWS Deployment (source commit: $commitHash)";
+  private function generateCommitMessage(): string {
+    if ($message = $this->input()->getOption('commit-msg')) {
+      return $message;
+    }
+    $message = $this->localMachineHelper()
+      ->executeFromCmd('git log -1 --pretty=%B', NULL, $this->getDir())
+      ->getOutput();
+    return str_replace("\n", '', $message);
   }
 
   /**
@@ -500,7 +509,8 @@ final class ArtifactDeploymentDrushCommands extends DrushCommands {
 
     $this->scaffoldFiles = [];
     $composerJson = json_decode(
-      $this->localmachineHelper()->readFile(Path::join($artifactDir, 'docroot', 'core', 'composer.json')),
+      $this->localmachineHelper()
+        ->readFile(Path::join($artifactDir, 'docroot', 'core', 'composer.json')),
       TRUE,
       512,
       JSON_THROW_ON_ERROR
