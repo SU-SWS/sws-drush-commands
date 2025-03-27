@@ -27,7 +27,7 @@ final class SyncDrushCommands extends DrushCommands {
   /**
    * Sync a site from production to local and perform database updates.
    */
-  #[CLI\Command(name: 'sws:site:sync', aliases: ['sync'])]
+  #[CLI\Command(name: 'sws:site:sync', aliases: ['drupal:sync', 'sync'])]
   #[CLI\Option(name: 'site_name', description: 'Site name to sync.')]
   #[CLI\Option(name: 'with-files', description: 'Sync files after the database.')]
   #[CLI\Option(name: 'partial', description: 'Run config imports with --partial flag.')]
@@ -229,7 +229,7 @@ final class SyncDrushCommands extends DrushCommands {
   /**
    * Sync public and private files from prod site.
    */
-  #[CLI\Command(name: 'sws:site:sync-files')]
+  #[CLI\Command(name: 'sws:site:sync-files', aliases: ['drupal:sync-files'])]
   #[CLI\Argument(name: 'site_name', description: 'Site name to sync.')]
   public function syncSiteFiles(string $site_name) {
     $outputCallback = $this->getOutputCallback($this->output(), $this->checklist);
