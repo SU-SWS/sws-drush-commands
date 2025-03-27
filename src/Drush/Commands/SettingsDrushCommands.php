@@ -20,7 +20,7 @@ final class SettingsDrushCommands extends DrushCommands {
   /**
    * Generates default settings files for Drupal and drush.
    */
-  #[CLI\Command(name: 'multisite:settings', aliases: ['settings'])]
+  #[CLI\Command(name: 'sws:multisite:settings', aliases: ['settings'])]
   #[CLI\Option(name: 'db-port', description: 'Database Port')]
   #[CLI\Option(name: 'db-host', description: 'Database Host')]
   #[CLI\Option(name: 'db-user', description: 'Database User')]
@@ -115,7 +115,7 @@ final class SettingsDrushCommands extends DrushCommands {
   /**
    * Writes a hash salt to ${repo.root}/salt.txt if one does not exist.
    */
-  #[CLI\Command(name: 'drupal:hash-salt:init', aliases: [
+  #[CLI\Command(name: 'sws:drupal:hash-salt:init', aliases: [
     'dhsi',
     'setup:hash-salt',
   ])]

@@ -21,7 +21,7 @@ final class AcquiaCleanupDrushCommands extends DrushCommands {
   /**
    * Delete on-demand database backups that are old.
    */
-  #[CLI\Command(name: 'acquia:clean-databases')]
+  #[CLI\Command(name: 'sws:acquia:clean-databases')]
   #[CLI\Option(name: 'app-id', description: 'Acquia application ID')]
   #[CLI\Option(name: 'app-key', description: 'Acquia API key')]
   #[CLI\Option(name: 'app-secret', description: 'Acquia API secret')]
@@ -103,7 +103,7 @@ final class AcquiaCleanupDrushCommands extends DrushCommands {
   /**
    * Delete git branches and tags that are not currently deployed on Acquia.
    */
-  #[CLI\Command(name: 'acquia:clean-git')]
+  #[CLI\Command(name: 'sws:acquia:clean-git')]
   #[CLI\Option(name: 'app-id', description: 'Acquia application ID')]
   #[CLI\Option(name: 'app-key', description: 'Acquia API key')]
   #[CLI\Option(name: 'app-secret', description: 'Acquia API secret')]

@@ -21,7 +21,7 @@ final class BltReplaceDrushCommands extends DrushCommands {
   /**
    * Creates/edits the drush.yml file with contents from the blt.yml.
    */
-  #[CLI\Command(name: 'migrate-blt')]
+  #[CLI\Command(name: 'sws:migrate-blt')]
   #[CLI\Option(name: 'app-key', description: 'Acquia API key')]
   #[CLI\Option(name: 'app-secret', description: 'Acquia API secret')]
   public function migrateBltConfig(array $options = [
@@ -42,10 +42,17 @@ final class BltReplaceDrushCommands extends DrushCommands {
 
     $file_system = $this->localMachineHelper()->getFilesystem();
 
+    $installProfile = $this->getBltConfig('project.profile.name', 'stanford_profile');
     $gitUrl = $this->getBltConfig('git.remotes', []);
     $appId = $this->getBltConfig('cloud.appId');
     $deployGitIgnore = $this->getBltConfig('deploy.gitignore_file');
     $multisites = array_filter(explode("\n", $this->getBltConfig('multisites', '')));
+
+    $dbPort = $this->getBltConfig('drupal.db.port', 3306);
+    $dbHost = $this->getBltConfig('drupal.db.host', 'localhost');
+    $dbUser = $this->getBltConfig('drupal.db.username', 'root');
+    $dbPass = $this->getBltConfig('drupal.db.password', 'password');
+    $dbName = $this->getBltConfig('drupal.db.database', 'drupal');
 
     $rsyncSsh = $this->getBltConfig('keys_rsync.ssh');
     $rsyncFiles = explode("\n", $this->getBltConfig('keys_rsync.files', ''));
@@ -56,23 +63,30 @@ final class BltReplaceDrushCommands extends DrushCommands {
     $drush_config = $this->getYamlFileContents($this->getDir() . '/drush/drush.yml');
     $local_drush_config = $this->getYamlFileContents($this->getDir() . '/drush/local.drush.yml');
 
-    $drush_config['command']['artifact']['deploy']['options']['git-url'] = $gitUrl;
-    $drush_config['command']['artifact']['deploy']['options']['post-build-script'] = 'drush/deploy-cleanup.sh';
-    $drush_config['command']['artifact']['deploy']['options']['artifact-dir'] = 'deploy';
+    $local_drush_config['command']['sws']['options']['db-port'] = $dbPort;
+    $local_drush_config['command']['sws']['options']['db-host'] = $dbHost;
+    $local_drush_config['command']['sws']['options']['db-user'] = $dbUser;
+    $local_drush_config['command']['sws']['options']['db-pass'] = $dbPass;
+    $local_drush_config['command']['sws']['options']['db-name'] = $dbName;
 
-    $drush_config['command']['acquia']['alias-build']['options']['alias-dir'] = 'drush/sites';
-    $drush_config['command']['acquia']['options']['app-id'] = $appId;
+    $drush_config['command']['site']['install']['profile'] = $installProfile;
+    $drush_config['command']['sws']['options']['git-url'] = $gitUrl;
+    $drush_config['command']['sws']['options']['post-build-script'] = 'drush/deploy-cleanup.sh';
+    $drush_config['command']['sws']['options']['artifact-dir'] = 'deploy';
 
-    $local_drush_config['command']['acquia']['options']['app-key'] = $appKey;
-    $local_drush_config['command']['acquia']['options']['app-secret'] = $appSecret;
+    $drush_config['command']['sws']['options']['alias-dir'] = 'drush/sites';
+    $drush_config['command']['sws']['options']['app-id'] = $appId;
+
+    $local_drush_config['command']['sws']['options']['app-key'] = $appKey;
+    $local_drush_config['command']['sws']['options']['app-secret'] = $appSecret;
 
     if ($rsyncSsh) {
-      $drush_config['command']['sync-keys']['options']['sync-ssh'] = $rsyncSsh;
-      $drush_config['command']['sync-keys']['options']['sync-files'] = $rsyncFiles;
+      $drush_config['command']['sws']['options']['sync-ssh'] = $rsyncSsh;
+      $drush_config['command']['sws']['options']['sync-files'] = $rsyncFiles;
     }
 
     if ($multisites) {
-      $drush_config['command']['multisite']['options']['multisites'] = $multisites;
+      $drush_config['command']['sws']['options']['multisites'] = $multisites;
     }
 
     $drush_config['drush']['paths']['config'][] = 'drush/local.drush.yml';

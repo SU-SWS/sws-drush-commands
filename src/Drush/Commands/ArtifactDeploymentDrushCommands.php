@@ -37,7 +37,7 @@ final class ArtifactDeploymentDrushCommands extends DrushCommands {
   /**
    * Build and push an artifact based on the current drupal installation.
    */
-  #[CLI\Command(name: 'artifact:deploy')]
+  #[CLI\Command(name: 'sws:artifact:deploy')]
   #[CLI\Option(name: 'drupal-core-folder', description: 'Drupal install folder e.g. docroot or web')]
   #[CLI\Option(name: 'git-url', description: 'Destination git repo url. Use multiple options for multiple urls. --git-url=foo --git-url=bar')]
   #[CLI\Option(name: 'branch', description: 'Destination branch name')]

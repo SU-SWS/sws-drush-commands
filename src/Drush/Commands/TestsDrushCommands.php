@@ -21,7 +21,7 @@ final class TestsDrushCommands extends DrushCommands {
   /**
    * Test a PHPUnit test report file for expected coverage.
    */
-  #[CLI\Command(name: 'tests:phpunit-coverage-check')]
+  #[CLI\Command(name: 'sws:tests:phpunit-coverage-check')]
   #[CLI\Argument(name: 'xml_directory', description: 'Path to xml coverage directory when using --coverage-xml=[coverage/directory].')]
   #[CLI\Option(name: 'min-coverage', description: 'Minimum coverage percent.')]
   #[CLI\Option(name: 'upload-coverage-report', description: 'Minimum coverage percent.')]
@@ -90,7 +90,7 @@ final class TestsDrushCommands extends DrushCommands {
   /**
    * Scaffold and prep phpunit tests.
    */
-  #[CLI\Command(name: 'source:tests:phpunit')]
+  #[CLI\Command(name: 'sws:source:tests:phpunit')]
   #[CLI\Option(name: 'db-user', description: 'Database user name')]
   #[CLI\Option(name: 'db-pass', description: 'Database password')]
   #[CLI\Option(name: 'db-host', description: 'Database host')]
@@ -129,7 +129,7 @@ final class TestsDrushCommands extends DrushCommands {
   /**
    * Prep and run codeception tests.
    */
-  #[CLI\Command(name: 'codeception')]
+  #[CLI\Command(name: 'sws:codeception', aliases: ['codeception'])]
   #[CLI\Option(name: 'site-domain', description: 'Local site domain for testing.')]
   #[CLI\Option(name: 'protocol', description: 'Domain protocol: http or https.')]
   #[CLI\Option(name: 'suite', description: 'Codeception suite to run.')]
@@ -174,6 +174,12 @@ final class TestsDrushCommands extends DrushCommands {
 
     $result = $this->localMachineHelper()
       ->executeFromCmd($command, NULL, $this->getDir());
+
+    if (!$result->isSuccessful()) {
+      $command = "vendor/bin/codecept run {$options['suite']} --steps --config=tests --html --group=failed";
+      $result = $this->localMachineHelper()
+        ->executeFromCmd($command, NULL, $this->getDir());
+    }
 
     if ($symLinkDir) {
       $fileSystem->remove($symLinkDir);

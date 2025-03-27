@@ -21,13 +21,15 @@ final class MultisiteDrushCommands extends DrushCommands {
   /**
    * Generates a new multisite.
    */
-  #[CLI\Command(name: 'multisite:new-site', aliases: ['multisite'])]
+  #[CLI\Command(name: 'sws:multisite:new-site', aliases: ['multisite'])]
   #[CLI\Argument(name: 'site_name', description: 'Machine name of the multisite.')]
   #[CLI\Option(name: 'no-update-drush', description: 'Flag to disable update the drush/drush.yml with the new multisite name.')]
+  #[CLI\Option(name: 'multisites', description: 'List of existing multisite.')]
   #[CLI\Usage(name: 'drush multisite foobar', description: 'New site and updates to drush config')]
   #[CLI\Usage(name: 'drush multisite foobar --no-update-drush', description: 'New site and no update to drush config')]
   public function newMultisite(string $site_name, array $options = [
     'no-update-drush' => InputOption::VALUE_NEGATABLE,
+    'multisites' => ['default'],
   ]
   ) {
     $this->say("This will generate a new site in the docroot/sites directory.");
@@ -59,8 +61,7 @@ final class MultisiteDrushCommands extends DrushCommands {
 
     if ($options['no-update-drush'] !== TRUE) {
       $drush_config = Yaml::parseFile($this->getDir() . '/drush/drush.yml');
-      $drush_config['command']['source']['build']['settings']['options']['multsites'][] = $site_name;
-      $drush_config['command']['multisite']['update']['options']['multisites'][] = $site_name;
+      $drush_config['command']['sws']['options']['multisites'][] = $site_name;
       file_put_contents($this->getDir() . '/drush/drush.yml', Yaml::dump($drush_config, 99, 2));
     }
   }
@@ -68,7 +69,7 @@ final class MultisiteDrushCommands extends DrushCommands {
   /**
    * Run database and config updates on all multisites.
    */
-  #[CLI\Command(name: 'multisite:update')]
+  #[CLI\Command(name: 'sws:multisite:update')]
   #[CLI\Option(name: 'multisites', description: 'List of sites to update')]
   #[CLI\Option(name: 'partial', description: 'Import config with --partial flag.')]
   public function updateSites(array $options = [
@@ -127,7 +128,7 @@ final class MultisiteDrushCommands extends DrushCommands {
   /**
    * Run database and config updates on all multisites.
    */
-  #[CLI\Command(name: 'multisite:update:parallel')]
+  #[CLI\Command(name: 'sws:multisite:update:parallel')]
   #[CLI\Option(name: 'multisites', description: 'List of sites to update')]
   #[CLI\Option(name: 'partial', description: 'Import config with --partial flag.')]
   public function updateSitesParallel(array $options = [

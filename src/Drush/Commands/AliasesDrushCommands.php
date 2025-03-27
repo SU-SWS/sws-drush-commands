@@ -31,7 +31,7 @@ final class AliasesDrushCommands extends DrushCommands {
   /**
    * Build Drush Aliases.
    */
-  #[CLI\Command(name: 'acquia:alias-build', aliases: ['aliases', 'sab'])]
+  #[CLI\Command(name: 'sws:acquia:alias-build', aliases: ['aliases', 'sab'])]
   #[CLI\Option(name: 'app-id', description: 'Acquia application ID')]
   #[CLI\Option(name: 'app-key', description: 'Acquia API key')]
   #[CLI\Option(name: 'app-secret', description: 'Acquia API secret')]

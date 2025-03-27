@@ -21,7 +21,7 @@ final class AcsfDrushCommands extends DrushCommands {
   /**
    * Perform database updates and config imports across all sites.
    */
-  #[CLI\Command(name: 'acsf:update-environment')]
+  #[CLI\Command(name: 'sws:acsf:update-environment')]
   #[ClI\Option(name: 'env', description: 'ACSF environment: dev, test, or live.')]
   #[ClI\Option(name: 'separate-db-config', description: 'Run all database updates first across all sites before starting config imports.')]
   public function updateEnvironmentSites(array $options = [
@@ -69,7 +69,7 @@ final class AcsfDrushCommands extends DrushCommands {
   /**
    * Run `drush deploy` on every site on the host.
    */
-  #[CLI\Command(name: 'acsf:update-environment:deploy')]
+  #[CLI\Command(name: 'sws:acsf:update-environment:deploy')]
   #[ClI\Option(name: 'env', description: 'ACSF environment: dev, test, or live.')]
   #[ClI\Option(name: 'host', description: 'ACSF Host.')]
   public function updateHostDeploy(array $options = [
@@ -97,7 +97,7 @@ final class AcsfDrushCommands extends DrushCommands {
   /**
    * Run `drush updatedb` on every site on the host.
    */
-  #[CLI\Command(name: 'acsf:update-environment:database')]
+  #[CLI\Command(name: 'sws:acsf:update-environment:database')]
   #[ClI\Option(name: 'env', description: 'ACSF environment: dev, test, or live.')]
   #[ClI\Option(name: 'host', description: 'ACSF Host.')]
   public function updateHostDatabase(array $options = [
@@ -126,7 +126,7 @@ final class AcsfDrushCommands extends DrushCommands {
   /**
    * Run `drush config:import` on every site on the host.
    */
-  #[CLI\Command(name: 'acsf:update-environment:config')]
+  #[CLI\Command(name: 'sws:acsf:update-environment:config')]
   #[ClI\Option(name: 'env', description: 'ACSF environment: dev, test, or live.')]
   #[ClI\Option(name: 'host', description: 'ACSF Host.')]
   public function updateHostConfig(array $options = [
