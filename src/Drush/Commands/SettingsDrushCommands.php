@@ -18,6 +18,28 @@ final class SettingsDrushCommands extends DrushCommands {
   use SwsCommandsTrait;
 
   /**
+   * Get config value of drush.
+   */
+  #[CLI\Command(name: 'sws:drush-config')]
+  public function getDrushConfig(string $config, array $options = [
+    'format' => 'text',
+  ]
+  ) {
+    $value = $this->getConfig()->get($config);
+    if ($options['format'] === 'json') {
+      echo json_encode($value);
+      return;
+    }
+
+    if (is_array($value)) {
+      foreach ($value as $item) {
+        echo is_array($item) || is_object($item) ? gettype($item) : $item;
+        echo PHP_EOL;
+      }
+    }
+  }
+
+  /**
    * Generates default settings files for Drupal and drush.
    */
   #[CLI\Command(name: 'sws:multisite:settings', aliases: ['settings'])]

@@ -61,7 +61,11 @@ final class MultisiteDrushCommands extends DrushCommands {
 
     if ($options['no-update-drush'] !== TRUE) {
       $drush_config = Yaml::parseFile($this->getDir() . '/drush/drush.yml');
-      $drush_config['command']['sws']['options']['multisites'][] = $site_name;
+
+      $options['multisites'][] = $site_name;
+      asort($options['multisites']);
+      $drush_config['command']['sws']['options']['multisites'] = $options['multisites'];
+
       file_put_contents($this->getDir() . '/drush/drush.yml', Yaml::dump($drush_config, 99, 2));
     }
   }
