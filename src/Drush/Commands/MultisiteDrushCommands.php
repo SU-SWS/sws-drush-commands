@@ -90,6 +90,7 @@ final class MultisiteDrushCommands extends DrushCommands {
       ->get('project.profile') ?: 'stanford_profile';
     $fileSystem = $this->localMachineHelper()->getFilesystem();
     $siteConfig = Path::join($this->getDir(), 'docroot', 'sites', $options['site'], 'sws.yml');
+    $siteProfile = NULL;
 
     if ($fileSystem->exists($siteConfig)) {
       $config = new Config();
@@ -97,17 +98,17 @@ final class MultisiteDrushCommands extends DrushCommands {
       $processor = new ConfigProcessor();
       $processor->extend($loader->load($siteConfig));
       $config->replace($processor->export());
-      $profile = $config->get('site.profile');
-
-      $this->localMachineHelper()->execute([
-        'drush',
-        'site-install',
-        $profile ?: $defaultProfile,
-        "--uri={$options['site']}",
-        '-v',
-        '-y',
-      ], NULL, $this->getDir());
+      $siteProfile = $config->get('site.profile');
     }
+
+    $this->localMachineHelper()->execute([
+      'drush',
+      'site-install',
+      $siteProfile ?: $defaultProfile,
+      "--uri={$options['site']}",
+      '-v',
+      '-y',
+    ], NULL, $this->getDir());
   }
 
   /**
