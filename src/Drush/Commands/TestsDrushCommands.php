@@ -95,11 +95,13 @@ final class TestsDrushCommands extends DrushCommands {
   #[CLI\Option(name: 'db-pass', description: 'Database password')]
   #[CLI\Option(name: 'db-host', description: 'Database host')]
   #[CLI\Option(name: 'db-name', description: 'Database name')]
+  #[CLI\Option(name: 'with-coverage', description: 'Run test with coverage report.')]
   public function phpUnit(array $options = [
     'db-user' => 'root',
     'db-pass' => 'password',
     'db-host' => 'localhost',
     'db-name' => 'drupal',
+    'with-coverage' => FALSE,
   ]
   ) {
     $dbUser = $this->input()->getOption('db-user');
@@ -122,8 +124,13 @@ final class TestsDrushCommands extends DrushCommands {
 
     file_put_contents($this->getDir() . '/docroot/core/phpunit.xml', $contents);
 
+    $testCommand = '../vendor/bin/phpunit --configuration=core --filter="/(Unit|Kernel)/" --testsuite=stanford';
+    if ($options['with-coverage']) {
+      $testCommand .= ' --log-junit=../artifacts/phpunit/results.xml --coverage-html=../artifacts/phpunit/coverage/html --coverage-xml=../artifacts/phpunit/coverage/xml --coverage-clover=../artifacts/phpunit/coverage/clover.xml';
+    }
+    $this->say($testCommand);
     $this->localMachineHelper()
-      ->executeFromCmd('../vendor/bin/phpunit --configuration=core --filter="/(Unit|Kernel)/" --testsuite=stanford', NULL, $this->getDir() . '/docroot/');
+      ->executeFromCmd($testCommand, NULL, $this->getDir() . '/docroot/');
   }
 
   /**
