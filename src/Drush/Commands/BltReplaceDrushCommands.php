@@ -47,7 +47,7 @@ final class BltReplaceDrushCommands extends DrushCommands {
     $file_system = $this->localMachineHelper()->getFilesystem();
 
     $installProfile = $this->getBltConfig('project.profile.name', 'stanford_profile');
-    $gitUrl = $this->getBltConfig('git.remotes', []);
+    $gitUrl = array_filter(explode("\n", $this->getBltConfig('git.remotes', [])));
     $appId = $this->getBltConfig('cloud.appId');
     $deployGitIgnore = $this->getBltConfig('deploy.gitignore_file');
     $multisites = array_filter(explode("\n", $this->getBltConfig('multisites', '')));
