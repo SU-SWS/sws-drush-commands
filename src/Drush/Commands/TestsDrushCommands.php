@@ -179,6 +179,10 @@ final class TestsDrushCommands extends DrushCommands {
       $command .= " --group={$options['group']}";
     }
 
+    if (getenv('CI')) {
+      $command .= '--env=ci';
+    }
+
     $result = $this->localMachineHelper()
       ->executeFromCmd($command, NULL, $this->getDir());
 
