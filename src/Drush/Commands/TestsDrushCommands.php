@@ -180,7 +180,7 @@ final class TestsDrushCommands extends DrushCommands {
     }
 
     if (getenv('CI')) {
-      $command .= '--env=ci';
+      $command .= ' --env=ci';
     }
 
     $result = $this->localMachineHelper()
