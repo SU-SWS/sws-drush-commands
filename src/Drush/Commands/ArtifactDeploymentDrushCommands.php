@@ -36,6 +36,8 @@ final class ArtifactDeploymentDrushCommands extends DrushCommands {
 
   /**
    * Build and push an artifact based on the current drupal installation.
+   *
+   * Replaces `blt deploy`
    */
   #[CLI\Command(name: 'sws:artifact:deploy')]
   #[CLI\Option(name: 'drupal-core-folder', description: 'Drupal install folder e.g. docroot or web')]

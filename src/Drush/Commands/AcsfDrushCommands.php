@@ -20,6 +20,8 @@ final class AcsfDrushCommands extends DrushCommands {
 
   /**
    * Perform database updates and config imports across all sites.
+   *
+   * Replaces `blt sws:update-environment`.
    */
   #[CLI\Command(name: 'sws:acsf:update-environment')]
   #[ClI\Option(name: 'env', description: 'ACSF environment: dev, test, or live.')]

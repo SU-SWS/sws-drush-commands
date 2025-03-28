@@ -24,6 +24,8 @@ final class MultisiteDrushCommands extends DrushCommands {
 
   /**
    * Generates a new multisite.
+   *
+   * Replaces `blt multisite`.
    */
   #[CLI\Command(name: 'sws:multisite:new-site', aliases: ['multisite'])]
   #[CLI\Argument(name: 'site_name', description: 'Machine name of the multisite.')]
@@ -76,6 +78,8 @@ final class MultisiteDrushCommands extends DrushCommands {
 
   /**
    * Install Drupal.
+   *
+   * Replaces `blt drupal:install`.
    */
   #[CLI\Command(name: 'sws:multisite:install', aliases: [
     'drupal:install',

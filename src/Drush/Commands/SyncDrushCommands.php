@@ -26,6 +26,8 @@ final class SyncDrushCommands extends DrushCommands {
 
   /**
    * Sync a site from production to local and perform database updates.
+   *
+   * Replaces `blt drupal:sync`.
    */
   #[CLI\Command(name: 'sws:site:sync', aliases: ['drupal:sync', 'sync'])]
   #[CLI\Option(name: 'site_name', description: 'Site name to sync.')]
@@ -194,6 +196,8 @@ final class SyncDrushCommands extends DrushCommands {
 
   /**
    * Sync key secret files.
+   *
+   * Replaces `blt sws:keys`.
    */
   #[CLI\Command(name: 'sws:keys', aliases: ['keys'])]
   #[CLI\Option(name: 'sync-ssh', description: 'Sync SSH string')]
@@ -228,6 +232,8 @@ final class SyncDrushCommands extends DrushCommands {
 
   /**
    * Sync public and private files from prod site.
+   *
+   * Replaces `blt drupal:sync:files`.
    */
   #[CLI\Command(name: 'sws:site:sync-files', aliases: ['drupal:sync-files'])]
   #[CLI\Argument(name: 'site_name', description: 'Site name to sync.')]

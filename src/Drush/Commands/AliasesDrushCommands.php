@@ -30,6 +30,8 @@ final class AliasesDrushCommands extends DrushCommands {
 
   /**
    * Build Drush Aliases.
+   *
+   * Replaces `blt aliases`.
    */
   #[CLI\Command(name: 'sws:acquia:alias-build', aliases: ['aliases', 'sab'])]
   #[CLI\Option(name: 'app-id', description: 'Acquia application ID')]

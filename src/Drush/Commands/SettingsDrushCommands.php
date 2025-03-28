@@ -41,6 +41,8 @@ final class SettingsDrushCommands extends DrushCommands {
 
   /**
    * Generates default settings files for Drupal and drush.
+   *
+   * Replaces `blt settings`.
    */
   #[CLI\Command(name: 'sws:multisite:settings', aliases: ['settings'])]
   #[CLI\Option(name: 'db-port', description: 'Database Port')]
