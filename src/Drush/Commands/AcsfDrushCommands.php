@@ -41,11 +41,11 @@ final class AcsfDrushCommands extends DrushCommands {
     $config_commands = [];
     foreach ($updateHosts as $host) {
       if ($options['separate-db-config']) {
-        $db_commands[] = "drush acsf:update-environment:database --env={$options['env']} --host=$host";
-        $config_commands[] = "drush acsf:update-environment:config --env={$options['env']} --host=$host";
+        $db_commands[] = "drush sws:acsf:update-environment:database --env={$options['env']} --host=$host";
+        $config_commands[] = "drush sws:acsf:update-environment:config --env={$options['env']} --host=$host";
       }
       else {
-        $db_commands[] = "drush acsf:update-environment:deploy --env={$options['env']} --host=$host";
+        $db_commands[] = "drush sws:acsf:update-environment:deploy --env={$options['env']} --host=$host";
       }
     }
 

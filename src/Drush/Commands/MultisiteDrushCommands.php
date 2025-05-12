@@ -200,7 +200,7 @@ final class MultisiteDrushCommands extends DrushCommands {
 
     $commands = [];
     foreach ($site_chunks as $sites) {
-      $command = 'drush multisite:update --multisites=' . implode(' --multisites=', $sites);
+      $command = 'drush sws:multisite:update --multisites=' . implode(' --multisites=', $sites);
       if ($options['partial']) {
         $command .= ' --partial';
       }
