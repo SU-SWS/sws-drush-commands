@@ -11,7 +11,7 @@ use Drush\Attributes as CLI;
 /**
  * A Drush command file.
  */
-#[CLI\Bootstrap(DrupalBootLevels::NONE)]
+#[CLI\Bootstrap(level: DrupalBootLevels::NONE)]
 final class HooksDrushCommands extends DrushCommands {
 
   use SwsCommandsTrait;

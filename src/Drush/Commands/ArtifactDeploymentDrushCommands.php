@@ -15,7 +15,7 @@ use Symfony\Component\Filesystem\Path;
 /**
  * A Drush command file.
  */
-#[CLI\Bootstrap(DrupalBootLevels::NONE)]
+#[CLI\Bootstrap(level: DrupalBootLevels::NONE)]
 final class ArtifactDeploymentDrushCommands extends DrushCommands {
 
   use SwsCommandsTrait;

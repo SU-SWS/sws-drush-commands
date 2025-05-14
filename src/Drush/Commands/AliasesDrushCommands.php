@@ -17,7 +17,7 @@ use Symfony\Component\Yaml\Yaml;
 /**
  * A Drush command file.
  */
-#[CLI\Bootstrap(DrupalBootLevels::NONE)]
+#[CLI\Bootstrap(level: DrupalBootLevels::NONE)]
 final class AliasesDrushCommands extends DrushCommands {
 
   use SwsCommandsTrait;

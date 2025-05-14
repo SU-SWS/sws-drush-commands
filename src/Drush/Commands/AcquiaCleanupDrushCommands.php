@@ -13,7 +13,7 @@ use Symfony\Component\Console\Input\InputOption;
 /**
  * A Drush command file.
  */
-#[CLI\Bootstrap(DrupalBootLevels::NONE)]
+#[CLI\Bootstrap(level: DrupalBootLevels::NONE)]
 final class AcquiaCleanupDrushCommands extends DrushCommands {
 
   use SwsCommandsTrait;

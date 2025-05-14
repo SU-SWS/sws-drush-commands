@@ -12,7 +12,7 @@ use Drush\Commands\DrushCommands;
 /**
  * A Drush command file.
  */
-#[CLI\Bootstrap(DrupalBootLevels::NONE)]
+#[CLI\Bootstrap(level: DrupalBootLevels::NONE)]
 final class SettingsDrushCommands extends DrushCommands {
 
   use SwsCommandsTrait;

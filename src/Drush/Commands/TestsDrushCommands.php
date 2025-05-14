@@ -13,7 +13,7 @@ use Symfony\Component\Filesystem\Path;
 /**
  * A Drush command file.
  */
-#[CLI\Bootstrap(DrupalBootLevels::NONE)]
+#[CLI\Bootstrap(level: DrupalBootLevels::NONE)]
 final class TestsDrushCommands extends DrushCommands {
 
   use SwsCommandsTrait;
