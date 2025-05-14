@@ -186,6 +186,10 @@ final class TestsDrushCommands extends DrushCommands {
     $result = $this->localMachineHelper()
       ->executeFromCmd($command, NULL, $this->getDir());
 
+    if (!file_exists('artifacts/report.html')) {
+      throw new \Exception('Codeception failed');
+    }
+
     if (!$result->isSuccessful()) {
       $command = "vendor/bin/codecept run {$options['suite']} --steps --config=tests --html --group=failed";
       $result = $this->localMachineHelper()
@@ -195,7 +199,7 @@ final class TestsDrushCommands extends DrushCommands {
     if ($symLinkDir) {
       $fileSystem->remove($symLinkDir);
     }
-    if (!$result->isSuccessful()) {
+    if (!$result->isSuccessful() || !file_exists('artifacts/report.html')) {
       throw new \Exception('Codeception failed');
     }
   }
