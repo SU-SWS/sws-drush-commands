@@ -332,7 +332,7 @@ final class ArtifactDeploymentDrushCommands extends DrushCommands {
    * Build the artifact.
    */
   private function buildArtifact(\Closure $outputCallback, string $artifactDir): void {
-    $outputCallback('out', "Mirroring source files from $this->getDir() to $artifactDir");
+    $outputCallback('out', "Mirroring source files from {$this->getDir()} to $artifactDir");
     $originFinder = $this->localmachineHelper()->getFinder();
     $originFinder->in($this->getDir())
       // Include dot files like .htaccess.
