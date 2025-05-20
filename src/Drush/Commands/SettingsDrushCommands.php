@@ -119,7 +119,9 @@ final class SettingsDrushCommands extends DrushCommands {
 
       // Copy files without overwriting.
       foreach ($copy_map as $from => $to) {
-        $file_system->copy($from, $to);
+        if (!$file_system->exists($to)) {
+          $file_system->copy($from, $to);
+        }
       }
 
       foreach ($expand_map as $to) {
