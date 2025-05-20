@@ -80,20 +80,7 @@ final class AcsfDrushCommands extends DrushCommands {
   ]
   ) {
     $aliases = array_keys($this->getSiteAliases($options['env'], $options['host']));
-    foreach ($aliases as $alias) {
-      $this->say($alias);
-      $result = $this->localMachineHelper()->execute([
-        'drush',
-        $alias,
-        'deploy',
-      ], NULL, $this->getDir());
-      if (!$result->isSuccessful()) {
-        $failed_report = sys_get_temp_dir() . '/failed-report.txt';
-        $this->localMachineHelper()
-          ->getFilesystem()
-          ->appendToFile($failed_report, $alias . PHP_EOL);
-      }
-    }
+    $this->performUpdate($aliases, ['deploy'], $options['host']);
   }
 
   /**
@@ -108,21 +95,7 @@ final class AcsfDrushCommands extends DrushCommands {
   ]
   ) {
     $aliases = array_keys($this->getSiteAliases($options['env'], $options['host']));
-    foreach ($aliases as $alias) {
-      $this->say($alias);
-      $result = $this->localMachineHelper()->execute([
-        'drush',
-        $alias,
-        'updatedb',
-        '-y',
-      ], NULL, $this->getDir());
-      if (!$result->isSuccessful()) {
-        $failed_report = sys_get_temp_dir() . '/failed-report.txt';
-        $this->localMachineHelper()
-          ->getFilesystem()
-          ->appendToFile($failed_report, $alias . PHP_EOL);
-      }
-    }
+    $this->performUpdate($aliases, ['updatedb', '-y'], $options['host']);
   }
 
   /**
@@ -137,14 +110,46 @@ final class AcsfDrushCommands extends DrushCommands {
   ]
   ) {
     $aliases = array_keys($this->getSiteAliases($options['env'], $options['host']));
-    foreach ($aliases as $alias) {
+    $this->performUpdate($aliases, ['config:import', '-y'], $options['host']);
+  }
+
+  /**
+   * Perform the drush updates for the aliases given the desired command.
+   *
+   * @param string[] $aliases
+   *   Drush site aliases.
+   * @param string[] $command
+   *   Drush command arguments.
+   * @param string $host
+   *   Acquia host url.
+   */
+  protected function performUpdate(array $aliases, array $command, string $host) {
+    $total_aliases = count($aliases);
+    $printOutput = TRUE;
+
+    foreach ($aliases as $position => $alias) {
+      $percent = round($position / $total_aliases * 100);
+      if ($percent % 5 == 0) {
+        $this->yell($percent . "% on $host");
+      }
+      else {
+        $this->say($percent . "% on $host");
+      }
+      if ($percent > 10) {
+        $printOutput = FALSE;
+      }
+
+      $tries = 0;
       $this->say($alias);
-      $result = $this->localMachineHelper()->execute([
-        'drush',
-        $alias,
-        'config:import',
-        '-y',
-      ], NULL, $this->getDir());
+      while ($tries < 3) {
+        $result = $this->localMachineHelper()
+          ->execute(array_merge([
+            'drush',
+            $alias,
+          ], $command), NULL, $this->getDir(), $printOutput);
+        $tries = $result->isSuccessful() ? 5 : $tries + 1;
+      }
+
       if (!$result->isSuccessful()) {
         $failed_report = sys_get_temp_dir() . '/failed-report.txt';
         $this->localMachineHelper()
