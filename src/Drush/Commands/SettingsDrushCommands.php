@@ -131,7 +131,7 @@ final class SettingsDrushCommands extends DrushCommands {
       }
 
       $project_settings_file_contents = file_get_contents($project_settings_file);
-      if (!preg_match('/^.*?sws\.settings\.php/', $project_settings_file_contents)) {
+      if (!preg_grep('/^.*?sws\.settings\.php/', explode("\n", $project_settings_file_contents))) {
         $project_settings_file_contents .= PHP_EOL . "require DRUPAL_ROOT . '/../drush/Commands/contrib/sws-drush-commands/settings/sws.settings.php';" . PHP_EOL;
         file_put_contents($project_settings_file, $project_settings_file_contents);
       }
