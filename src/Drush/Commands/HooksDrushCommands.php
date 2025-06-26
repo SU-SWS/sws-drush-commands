@@ -21,11 +21,19 @@ final class HooksDrushCommands extends DrushCommands {
    */
   #[CLI\Hook(type: 'pre-command', target: 'site:install')]
   public function preSiteInstall() {
-    if (!$this->input()->getArgument('profile')) {
-      $this->input()->setArgument('profile', [
-        $this->getConfig()
-          ->get('project.profile') ?: 'stanford_profile',
-      ]);
+    // Drush 12 uses `profile` drush 13 uses `recipeOrProfile`.
+    $arg_names = ['profile', 'recipeOrProfile'];
+    foreach ($arg_names as $arg_name) {
+      if (!$this->input()->hasArgument($arg_name)) {
+        try {
+          $this->input()->setArgument($arg_name, [
+            $this->getConfig()
+              ->get('project.profile') ?: 'stanford_profile',
+          ]);
+        }
+        catch (\Exception $exception) {
+        }
+      }
     }
   }
 
