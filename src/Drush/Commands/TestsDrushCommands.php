@@ -192,6 +192,11 @@ final class TestsDrushCommands extends DrushCommands {
 
     if (!$result->isSuccessful()) {
       $command = "vendor/bin/codecept run {$options['suite']} --steps --config=tests --html --group=failed";
+
+      if (getenv('CI')) {
+        $command .= ' --env=ci';
+      }
+
       $result = $this->localMachineHelper()
         ->executeFromCmd($command, NULL, $this->getDir());
     }
