@@ -189,27 +189,37 @@ final class AcquiaCleanupDrushCommands extends DrushCommands {
       }
     }
 
-    $perform_branch_delete = $this->confirm(sprintf('Are you sure you wish to delete the following branches? %s', implode(', ', $remove_branches)));
-    $perform_tag_delete = $this->confirm(sprintf('Are you sure you wish to delete the following tags? %s', implode(', ', $remove_tags)));
+    $perform_branch_delete = TRUE;
+    $perform_tag_delete = TRUE;
+    if ($this->input()->isInteractive()) {
+      $perform_branch_delete = $this->confirm(sprintf('Are you sure you wish to delete the following branches? %s', implode(', ', $remove_branches)));
+      $perform_tag_delete = $this->confirm(sprintf('Are you sure you wish to delete the following tags? %s', implode(', ', $remove_tags)));
+    }
     if ($perform_branch_delete) {
       foreach ($remove_branches as $branch) {
-        $this->localMachineHelper()->execute([
+        $result = $this->localMachineHelper()->execute([
           'git',
           'push',
           '-d',
           'origin',
           $branch,
         ], NULL, "$root/deploy");
+        if (!$result->isSuccessful()) {
+          throw new \Exception('Failed Deleting branch ' . $branch);
+        }
       }
     }
     if ($perform_tag_delete) {
       foreach ($remove_tags as $tag) {
-        $this->localMachineHelper()->execute([
+        $result = $this->localMachineHelper()->execute([
           'git',
           'push',
           'origin',
           ":res/tags/$tag",
         ], NULL, "$root/deploy");
+        if (!$result->isSuccessful()) {
+          throw new \Exception('Failed Deleting tag ' . $tag);
+        }
       }
     }
   }
