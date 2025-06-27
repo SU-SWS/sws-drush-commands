@@ -196,7 +196,7 @@ final class AcquiaCleanupDrushCommands extends DrushCommands {
       $perform_tag_delete = $this->confirm(sprintf('Are you sure you wish to delete the following tags? %s', implode(', ', $remove_tags)));
     }
     if ($perform_branch_delete) {
-      foreach ($remove_branches as $branch) {
+      foreach (array_filter($remove_branches) as $branch) {
         $result = $this->localMachineHelper()->execute([
           'git',
           'push',
@@ -210,12 +210,12 @@ final class AcquiaCleanupDrushCommands extends DrushCommands {
       }
     }
     if ($perform_tag_delete) {
-      foreach ($remove_tags as $tag) {
+      foreach (array_filter($remove_tags) as $tag) {
         $result = $this->localMachineHelper()->execute([
           'git',
           'push',
           'origin',
-          ":res/tags/$tag",
+          ":refs/tags/$tag",
         ], NULL, "$root/deploy");
         if (!$result->isSuccessful()) {
           throw new \Exception('Failed Deleting tag ' . $tag);
