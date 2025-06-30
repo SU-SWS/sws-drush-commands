@@ -454,7 +454,7 @@ final class ArtifactDeploymentDrushCommands extends DrushCommands {
         $this->io->warning("Unable to forcibly add $file to new branch");
       }
     }
-    $commitMessage = $this->generateCommitMessage();
+    $commitMessage = $this->generateCommitMessage() ?: $tag;
     $process = $this->localmachineHelper()->execute([
       'git',
       'commit',
