@@ -128,14 +128,36 @@ final class MultisiteDrushCommands extends DrushCommands {
   ) {
     $errors = [];
     $multisites = $this->input()->getOption('multisites');
+    $successes = 0;
+
     foreach ($multisites as $site) {
+      $site_dir = $this->getDir() . '/docroot/sites/' . $site;
+      if (!file_exists($site_dir)) {
+        $this->say(sprintf('No site directory found for %s.', $site));
+        continue;
+      }
+
+      $install_profile = $this->localMachineHelper()->execute([
+        'drush',
+        '@self',
+        'status',
+        "--uri=$site",
+        '--fields=install-profile',
+        '--format=string',
+      ], NULL, $site_dir, FALSE)->getOutput();
+
+      if (!preg_match('/([\w_])+/', $install_profile)) {
+        $this->say(sprintf('No installed site detected for %s.', $site));
+        continue;
+      }
+
       if (!$options['partial']) {
         $result = $this->localMachineHelper()->execute([
           'drush',
           '@self',
           'deploy',
-          "-l $site",
-        ], NULL, $this->getDir());
+          "--uri=$site",
+        ], NULL, $site_dir);
       }
       else {
         $result = $this->localMachineHelper()->execute([
@@ -143,35 +165,37 @@ final class MultisiteDrushCommands extends DrushCommands {
           '@self',
           'updb',
           '-y',
-          "-l $site",
-        ], NULL, $this->getDir());
+          "--uri=$site",
+        ], NULL, $site_dir);
         if ($result->isSuccessful()) {
           $result = $this->localMachineHelper()->execute([
             'drush',
             '@self',
             'config:import',
             '-y',
-            "-l $site",
-          ], NULL, $this->getDir());
+            "--uri=$site",
+          ], NULL, $site_dir);
           if ($result->isSuccessful()) {
             $result = $this->localMachineHelper()->execute([
               'drush',
               '@self',
               'deploy:hook',
               '-y',
-              "-l $site",
-            ], NULL, $this->getDir());
+              "--uri=$site",
+            ], NULL, $site_dir);
           }
         }
       }
+      $successes++;
       if (!$result->isSuccessful()) {
+        $successes--;
         $errors[] = $site;
       }
     }
     if ($errors) {
       throw new \Exception('Failed to update sites: ' . implode(', ', $errors));
     }
-    $this->say(sprintf('Successfully updated %s sites', count($multisites)));
+    $this->say(sprintf('Successfully updated %s sites', $successes));
   }
 
   /**
