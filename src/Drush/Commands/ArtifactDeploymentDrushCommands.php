@@ -128,7 +128,7 @@ final class ArtifactDeploymentDrushCommands extends DrushCommands {
     if ($options['post-build-script']) {
       $this->checklist->addItem('Running post-build script');
       $process = $this->localmachineHelper()
-        ->executeFromCmd($options['post-build-script'], $outputCallback, $artifactDir, TRUE);
+        ->executeFromCmd($options['post-build-script'], $outputCallback, $artifactDir);
       if (!$process->isSuccessful()) {
         $this->io()->error($process->getCommandLine());
         $this->io()->error($process->getOutput());
@@ -241,8 +241,6 @@ final class ArtifactDeploymentDrushCommands extends DrushCommands {
     $process = $this->localmachineHelper()->execute([
       'git',
       'fetch',
-      '--depth=1',
-      '--update-head-ok',
       $vcsUrl,
       $vcsPath . ':' . $vcsPath,
     ],
@@ -532,7 +530,7 @@ final class ArtifactDeploymentDrushCommands extends DrushCommands {
    */
   private function pushArtifact(\Closure $outputCallback, string $artifactDir, array $vcsUrls, string $destGit, string $destType = 'branch'): void {
     $this->localmachineHelper()->checkRequiredBinariesExist(['git']);
-//    $this->localmachineHelper()->execute(['git', 'config', '--global', 'http.postBuffer', 268435456]);
+    $this->localmachineHelper()->execute(['git', 'config', '--global', 'http.postBuffer', 268435456]);
 
     foreach ($vcsUrls as $vcsUrl) {
       $outputCallback('out', "Pushing changes to Git ($vcsUrl)");

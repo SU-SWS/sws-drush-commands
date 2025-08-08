@@ -41,11 +41,26 @@ final class AcsfDrushCommands extends DrushCommands {
     $config_commands = [];
     foreach ($updateHosts as $host) {
       if ($options['separate-db-config']) {
-        $db_commands[] = "drush sws:acsf:update-environment:database --env={$options['env']} --host=$host";
-        $config_commands[] = "drush sws:acsf:update-environment:config --env={$options['env']} --host=$host";
+        $db_commands[] = [
+          'drush',
+          'sws:acsf:update-environment:database',
+          '--env=' . $options['env'],
+          '--host=' . $host,
+        ];
+        $config_commands[] = [
+          'drush',
+          'sws:acsf:update-environment:config',
+          '--env=' . $options['env'],
+          '--host=' . $host,
+        ];
       }
       else {
-        $db_commands[] = "drush sws:acsf:update-environment:deploy --env={$options['env']} --host=$host";
+        $db_commands[] = [
+          'drush',
+          'sws:acsf:update-environment:deploy',
+          '--env=' . $options['env'],
+          '--host=' . $host,
+        ];
       }
     }
 
@@ -56,10 +71,9 @@ final class AcsfDrushCommands extends DrushCommands {
     }
     $fileSystem->touch($failed_report);
 
-    $this->localMachineHelper()->executeFromCmd(implode(' & ', $db_commands));
+    $this->localMachineHelper()->executeParallel($db_commands);
     if ($config_commands) {
-      $this->localMachineHelper()
-        ->executeFromCmd(implode(' & ', $config_commands));
+      $this->localMachineHelper()->executeParallel($config_commands);
     }
 
     $failed = array_unique(array_filter(explode("\n", file_get_contents($failed_report))));

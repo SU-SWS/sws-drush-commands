@@ -121,35 +121,18 @@ final class MultisiteDrushCommands extends DrushCommands {
   #[CLI\Command(name: 'sws:multisite:update')]
   #[CLI\Option(name: 'multisites', description: 'List of sites to update')]
   #[CLI\Option(name: 'partial', description: 'Import config with --partial flag.')]
+  #[CLI\Option(name: 'show-output', description: 'Display database updates and config update process.')]
   public function updateSites(array $options = [
     'multisites' => ['default'],
     'partial' => FALSE,
+    'show-output' => FALSE,
   ]
   ) {
-    $errors = [];
-    $multisites = $this->input()->getOption('multisites');
-    $successes = 0;
+    $multiSites = $this->input()->getOption('multisites');
 
-    foreach ($multisites as $site) {
+    foreach ($multiSites as $site) {
       $site_dir = $this->getDir() . '/docroot/sites/' . $site;
-      if (!file_exists($site_dir)) {
-        $this->say(sprintf('No site directory found for %s.', $site));
-        continue;
-      }
-
-      $install_profile = $this->localMachineHelper()->execute([
-        'drush',
-        '@self',
-        'status',
-        "--uri=$site",
-        '--fields=install-profile',
-        '--format=string',
-      ], NULL, $site_dir, FALSE)->getOutput();
-
-      if (!preg_match('/([\w_])+/', $install_profile)) {
-        $this->say(sprintf('No installed site detected for %s.', $site));
-        continue;
-      }
+      $this->say("Beginning updates for $site.");
 
       if (!$options['partial']) {
         $result = $this->localMachineHelper()->execute([
@@ -157,7 +140,7 @@ final class MultisiteDrushCommands extends DrushCommands {
           '@self',
           'deploy',
           "--uri=$site",
-        ], NULL, $site_dir);
+        ], NULL, $site_dir, $options['show-output']);
       }
       else {
         $result = $this->localMachineHelper()->execute([
@@ -174,7 +157,7 @@ final class MultisiteDrushCommands extends DrushCommands {
             'config:import',
             '-y',
             "--uri=$site",
-          ], NULL, $site_dir);
+          ], NULL, $site_dir, $options['show-output']);
           if ($result->isSuccessful()) {
             $result = $this->localMachineHelper()->execute([
               'drush',
@@ -182,20 +165,21 @@ final class MultisiteDrushCommands extends DrushCommands {
               'deploy:hook',
               '-y',
               "--uri=$site",
-            ], NULL, $site_dir);
+            ], NULL, $site_dir, $options['show-output']);
           }
         }
       }
-      $successes++;
-      if (!$result->isSuccessful()) {
-        $successes--;
-        $errors[] = $site;
+
+      if ($result->isSuccessful()) {
+        $this->say("Successfully updated $site");
+        file_put_contents(sys_get_temp_dir() . '/success-report.txt', $site . PHP_EOL, FILE_APPEND);
+        continue;
       }
+
+      $this->say("An error occurred during update on $site:");
+      $this->say($result->getErrorOutput());
+      file_put_contents(sys_get_temp_dir() . '/failed-report.txt', $site . PHP_EOL, FILE_APPEND);
     }
-    if ($errors) {
-      throw new \Exception('Failed to update sites: ' . implode(', ', $errors));
-    }
-    $this->say(sprintf('Successfully updated %s sites', $successes));
   }
 
   /**
@@ -204,17 +188,26 @@ final class MultisiteDrushCommands extends DrushCommands {
   #[CLI\Command(name: 'sws:multisite:update:parallel')]
   #[CLI\Option(name: 'multisites', description: 'List of sites to update')]
   #[CLI\Option(name: 'partial', description: 'Import config with --partial flag.')]
+  #[CLI\Option(name: 'parallel-processes', description: 'How many parallel processes to run simultaneously.')]
+  #[CLI\Option(name: 'show-output', description: 'Display database updates and config update process.')]
   public function updateSitesParallel(array $options = [
     'multisites' => ['default'],
     'partial' => FALSE,
+    'parallel-processes' => 5,
+    'show-output' => FALSE,
   ]
   ) {
-    $parallel_executions = (int) getenv('UPDATE_PARALLEL_PROCESSES') ?: 10;
-    $multisites = $this->input()->getOption('multisites');
+    file_put_contents(sys_get_temp_dir() . '/success-report.txt', '');
+    file_put_contents(sys_get_temp_dir() . '/failed-report.txt', '');
 
+    $parallel_executions = (int) getenv('UPDATE_PARALLEL_PROCESSES') ?: $options['parallel-processes'];
+    $multiSites = $this->input()->getOption('multisites');
+    $multiSites = array_filter($multiSites, [$this, 'isDrupalInstalled']);
+
+    $site_chunks = [];
     $i = 0;
-    while ($multisites) {
-      $site = array_splice($multisites, 0, 1);
+    while ($multiSites) {
+      $site = array_splice($multiSites, 0, 1);
       $site_chunks[$i][] = reset($site);
       $i++;
       if ($i >= $parallel_executions) {
@@ -224,14 +217,61 @@ final class MultisiteDrushCommands extends DrushCommands {
 
     $commands = [];
     foreach ($site_chunks as $sites) {
-      $command = 'drush sws:multisite:update --multisites=' . implode(' --multisites=', $sites);
+      foreach ($sites as &$site) {
+        $site = '--multisites=' . $site;
+      }
+
+      $command = ['drush', 'sws:multisite:update', ...$sites];
       if ($options['partial']) {
-        $command .= ' --partial';
+        $command[] = '--partial';
+      }
+      if ($options['show-output']) {
+        $command[] = '--show-output';
       }
       $commands[] = $command;
     }
-    return $this->localMachineHelper()
-      ->executeFromCmd(implode(' & ', $commands));
+    $this->localMachineHelper()->executeParallel($commands);
+
+    $success_report = array_filter(explode("\n", file_get_contents(sys_get_temp_dir() . '/success-report.txt')));
+    $failed_report = array_filter(explode("\n", file_get_contents(sys_get_temp_dir() . '/failed-report.txt')));
+
+    $this->yell(sprintf('Updated %s sites successfully.', count($success_report)), 100);
+
+    if ($failed_report) {
+      $this->yell(sprintf("Update failed for the following sites:\n%s", implode("\n", $failed_report)), 100, 'red');
+      throw new \Exception('Failed update');
+    }
+  }
+
+  /**
+   * Run drush status to check if a site is installed.
+   *
+   * @param string $site
+   *   Site name.
+   *
+   * @return bool
+   *   If a site is installed.
+   */
+  protected function isDrupalInstalled(string $site): bool {
+    $site_dir = $this->getDir() . '/docroot/sites/' . $site;
+    if (!file_exists($site_dir)) {
+      $this->say(sprintf('No site directory found for %s.', $site));
+      return FALSE;
+    }
+    $install_profile = $this->localMachineHelper()->execute([
+      'drush',
+      '@self',
+      'status',
+      "--uri=$site",
+      '--fields=install-profile',
+      '--format=string',
+    ], NULL, $site_dir, FALSE)->getOutput();
+
+    if (!preg_match('/([\w_])+/', $install_profile)) {
+      $this->say(sprintf('No installed site detected for %s.', $site));
+      return FALSE;
+    }
+    return TRUE;
   }
 
 }
