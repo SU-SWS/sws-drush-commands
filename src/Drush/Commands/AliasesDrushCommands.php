@@ -10,6 +10,7 @@ use Drush\Attributes as CLI;
 use Drush\Boot\DrupalBootLevels;
 use Drush\Commands\DrushCommands;
 use Drush\Drush;
+use Drush\Exceptions\CommandFailedException;
 use Symfony\Component\Console\Input\InputOption;
 use Symfony\Component\Filesystem\Path;
 use Symfony\Component\Yaml\Yaml;
@@ -216,7 +217,7 @@ final class AliasesDrushCommands extends DrushCommands {
       "$destination_dir/sites.json",
     ], NULL, $this->dir, FALSE);
     if (!$result->isSuccessful()) {
-      throw new \Exception($result->getErrorOutput());
+      throw new CommandFailedException($result->getErrorOutput(), $result->getExitCode());
     }
 
     $fullPath = $destination_dir . '/sites.json';

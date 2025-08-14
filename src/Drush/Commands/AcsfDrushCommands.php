@@ -8,6 +8,7 @@ use Drupal\SwsDrush\Helpers\AcquiaApi;
 use Drush\Attributes as CLI;
 use Drush\Boot\DrupalBootLevels;
 use Drush\Commands\DrushCommands;
+use Drush\Exceptions\CommandFailedException;
 use Symfony\Component\Console\Input\InputOption;
 
 /**
@@ -191,7 +192,7 @@ final class AcsfDrushCommands extends DrushCommands {
       '--format=json',
     ], NULL, $this->getDir(), FALSE);
     if (!$result->isSuccessful()) {
-      throw new \Exception($result->getErrorOutput());
+      throw new CommandFailedException($result->getErrorOutput(), $result->getExitCode());
     }
     $aliases = json_decode($result->getOutput(), TRUE, 512, JSON_THROW_ON_ERROR);
 

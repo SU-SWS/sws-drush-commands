@@ -11,6 +11,7 @@ use Drush\Boot\DrupalBootLevels;
 use Drush\Commands\DrushCommands;
 use Drush\Attributes as CLI;
 use Drush\Config\Loader\YamlConfigLoader;
+use Drush\Exceptions\CommandFailedException;
 use Symfony\Component\Console\Input\InputOption;
 use Symfony\Component\Filesystem\Path;
 
@@ -85,7 +86,7 @@ final class SyncDrushCommands extends DrushCommands {
       '-y',
     ], $outputCallback, $this->getDir());
     if (!$result->isSuccessful()) {
-      throw new \Exception('Failed to update database: ' . $result->getErrorOutput());
+      throw new CommandFailedException('Failed to update database: ' . $result->getErrorOutput(), $result->getExitCode());
     }
   }
 
@@ -105,7 +106,7 @@ final class SyncDrushCommands extends DrushCommands {
     ], $outputCallback, $this->getDir());
 
     if (!$result->isSuccessful()) {
-      throw new \Exception('Failed to update database: ' . $result->getErrorOutput());
+      throw new CommandFailedException('Failed to update database: ' . $result->getErrorOutput(), $result->getExitCode());
     }
   }
 
@@ -155,7 +156,7 @@ final class SyncDrushCommands extends DrushCommands {
       ], $outputCallback, $this->getDir());
     }
     if (!$result->isSuccessful()) {
-      throw new \Exception('Failed to update database: ' . $result->getErrorOutput());
+      throw new CommandFailedException('Failed to update database: ' . $result->getErrorOutput(), $result->getExitCode());
     }
   }
 
@@ -177,7 +178,7 @@ final class SyncDrushCommands extends DrushCommands {
       '-y',
     ], $outputCallback, $this->getDir());
     if (!$result->isSuccessful()) {
-      throw new \Exception('Failed to sync public files: ' . $result->getErrorOutput());
+      throw new CommandFailedException('Failed to sync public files: ' . $result->getErrorOutput(), $result->getExitCode());
     }
 
     $result = $this->localMachineHelper()->execute([
@@ -190,7 +191,7 @@ final class SyncDrushCommands extends DrushCommands {
       '-y',
     ], $outputCallback, $this->getDir());
     if (!$result->isSuccessful()) {
-      throw new \Exception('Failed to sync private files: ' . $result->getErrorOutput());
+      throw new CommandFailedException('Failed to sync private files: ' . $result->getErrorOutput(), $result->getExitCode());
     }
   }
 

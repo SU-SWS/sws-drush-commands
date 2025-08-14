@@ -8,6 +8,7 @@ use Drupal\SwsDrush\Helpers\AcquiaApi;
 use Drush\Attributes as CLI;
 use Drush\Boot\DrupalBootLevels;
 use Drush\Commands\DrushCommands;
+use Drush\Exceptions\CommandFailedException;
 use Symfony\Component\Console\Input\InputOption;
 
 /**
@@ -40,7 +41,7 @@ final class AcquiaCleanupDrushCommands extends DrushCommands {
 
     $application = $acquiaApi->acquiaApplications->get($appId);
     if ($application->hosting->type == 'acsf') {
-      throw new \Exception('ACSF Applications are not supported. Only single applications (ACE, ACN) are supported.');
+      throw new CommandFailedException('ACSF Applications are not supported. Only single applications (ACE, ACN) are supported.');
     }
 
     $environments = $this->safelyRunAcquiaRequest($acquiaApi, [
@@ -158,7 +159,7 @@ final class AcquiaCleanupDrushCommands extends DrushCommands {
       '--remotes',
     ], NULL, "$root/deploy", FALSE);
     if (!$result->isSuccessful()) {
-      throw new \Exception('Failed getting branch names.');
+      throw new CommandFailedException('Failed getting branch names.', $result->getExitCode());
     }
     $branches = explode("\n", $result->getOutput());
 
@@ -177,7 +178,7 @@ final class AcquiaCleanupDrushCommands extends DrushCommands {
       '-l',
     ], NULL, "$root/deploy", FALSE);
     if (!$result->isSuccessful()) {
-      throw new \Exception('Failed getting tag names.');
+      throw new CommandFailedException('Failed getting tag names.', $result->getExitCode());
     }
 
     $tags = explode("\n", $result->getOutput());
@@ -205,7 +206,7 @@ final class AcquiaCleanupDrushCommands extends DrushCommands {
           $branch,
         ], NULL, "$root/deploy");
         if (!$result->isSuccessful()) {
-          throw new \Exception('Failed Deleting branch ' . $branch);
+          throw new CommandFailedException('Failed Deleting branch ' . $branch, $result->getExitCode());
         }
       }
     }
@@ -218,7 +219,7 @@ final class AcquiaCleanupDrushCommands extends DrushCommands {
           ":refs/tags/$tag",
         ], NULL, "$root/deploy");
         if (!$result->isSuccessful()) {
-          throw new \Exception('Failed Deleting tag ' . $tag);
+          throw new CommandFailedException('Failed Deleting tag ' . $tag, $result->getExitCode());
         }
       }
     }

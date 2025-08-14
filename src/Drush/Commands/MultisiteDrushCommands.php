@@ -8,6 +8,7 @@ use Consolidation\Config\Config;
 use Consolidation\Config\Loader\ConfigProcessor;
 use Drush\Boot\DrupalBootLevels;
 use Drush\Config\Loader\YamlConfigLoader;
+use Drush\Exceptions\CommandFailedException;
 use Symfony\Component\Console\Input\InputOption;
 use Drush\Attributes as CLI;
 use Drush\Commands\DrushCommands;
@@ -43,7 +44,7 @@ final class MultisiteDrushCommands extends DrushCommands {
     $new_site_dir = $this->getDir() . '/docroot/sites/' . $site_name;
 
     if (file_exists($new_site_dir)) {
-      throw new \Exception("Cannot generate new multisite, $new_site_dir already exists!");
+      throw new CommandFailedException("Cannot generate new multisite, $new_site_dir already exists!");
     }
     $default_site_dir = $this->getDir() . '/docroot/sites/default';
 
@@ -239,7 +240,7 @@ final class MultisiteDrushCommands extends DrushCommands {
 
     if ($failed_report) {
       $this->yell(sprintf("Update failed for the following sites:\n%s", implode("\n", $failed_report)), 100, 'red');
-      throw new \Exception('Failed update');
+      throw new CommandFailedException('Failed update');
     }
   }
 
