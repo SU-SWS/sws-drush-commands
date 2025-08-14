@@ -87,7 +87,7 @@ final class TestsDrushCommands extends DrushCommands {
     $result = $this->localMachineHelper()
       ->executeFromCmd($testCommand, NULL, $this->getDir() . '/docroot/');
     if (!$result->isSuccessful()) {
-      throw new CommandFailedException($result->getExitCodeText(), $result->getExitCode());
+      throw new CommandFailedException('PHPUnit tests failed', $result->getExitCode());
     }
   }
 
