@@ -49,15 +49,6 @@ final class TestsDrushCommands extends DrushCommands {
       throw new CommandFailedException("Test coverage is only at $percent%. $min% is required.");
     }
     $this->yell(sprintf('Coverage at %s%%. %s%% required.', $percent, $min));
-
-    if ($options['upload-coverage-report']) {
-      if (!getenv('CC_TEST_REPORTER_ID')) {
-        throw new CommandFailedException('Coverage report upload requires CC_TEST_REPORTER_ID environment variable.');
-      }
-
-      $this->ensureOption('clover-file', fn() => $this->io()
-        ->ask('Path to clover file.'), TRUE);
-    }
   }
 
   /**
