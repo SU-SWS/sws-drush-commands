@@ -4,12 +4,12 @@ declare(strict_types=1);
 
 namespace Drupal\SwsDrush\Drush\Commands;
 
-use Drupal\SwsDrush\Helpers\AcquiaApi;
+use Drupal\SwsDrush\Output\Checklist;
 use Drush\Attributes as CLI;
 use Drush\Boot\DrupalBootLevels;
 use Drush\Commands\DrushCommands;
 use Drush\Exceptions\CommandFailedException;
-use Symfony\Component\Console\Input\InputOption;
+use GuzzleHttp\Client;
 
 /**
  * A Drush command file.
@@ -27,12 +27,21 @@ final class AcsfDrushCommands extends DrushCommands {
   #[CLI\Command(name: 'sws:acsf:update-environment')]
   #[ClI\Option(name: 'env', description: 'ACSF environment: dev, test, or live.')]
   #[ClI\Option(name: 'separate-db-config', description: 'Run all database updates first across all sites before starting config imports.')]
+  #[CLI\Option(name: 'slack-hook', description: 'Slack webhook url that is used to send notification updates.')]
+  #[CLI\Option(name: 'delay-config-import', description: 'Delay the configuration import by the given number of seconds. Only when separate --separate-db-config is passed.')]
   public function updateEnvironmentSites(array $options = [
     'env' => 'dev',
     'separate-db-config' => FALSE,
+    'slack-hook' => NULL,
+    'delay-config-import' => 0,
   ]
   ) {
-    $siteAliases = $this->getSiteAliases($options['env']);
+    $env = $this->commandData->options()['env'];
+    if (!in_array($env, ['dev', 'test', 'live'])) {
+      throw new CommandFailedException('Invalid environment option');
+    }
+
+    $siteAliases = $this->getSiteAliases($env);
     $updateHosts = [];
     foreach ($siteAliases as $aliasInfo) {
       $updateHosts[$aliasInfo['host']] = $aliasInfo['host'];
@@ -40,47 +49,76 @@ final class AcsfDrushCommands extends DrushCommands {
 
     $db_commands = [];
     $config_commands = [];
+    $options = [
+      "--env=$env",
+      '--slack-hook=' . $options['slack-hook'],
+    ];
+
+    $separateDbConfig = $this->commandData->options()['separate-db-config'];
+
     foreach ($updateHosts as $host) {
-      if ($options['separate-db-config']) {
+      if ($separateDbConfig) {
         $db_commands[] = [
           'drush',
           'sws:acsf:update-environment:database',
-          '--env=' . $options['env'],
           '--host=' . $host,
+          ...$options,
         ];
         $config_commands[] = [
           'drush',
           'sws:acsf:update-environment:config',
-          '--env=' . $options['env'],
           '--host=' . $host,
+          ...$options,
         ];
       }
       else {
         $db_commands[] = [
           'drush',
           'sws:acsf:update-environment:deploy',
-          '--env=' . $options['env'],
           '--host=' . $host,
+          ...$options,
         ];
       }
     }
 
-    $failed_report = sys_get_temp_dir() . '/failed-report.txt';
-    $fileSystem = $this->localMachineHelper()->getFilesystem();
-    if ($fileSystem->exists($failed_report)) {
-      $fileSystem->remove($failed_report);
-    }
-    $fileSystem->touch($failed_report);
+    $stack = preg_replace('/\..*/', '', reset($siteAliases)['user']);
+    $report_file = sys_get_temp_dir() . '/' . $stack . '.json';
 
+    $fileSystem = $this->localMachineHelper()->getFilesystem();
+    $fileSystem->dumpFile($report_file, json_encode([
+      'complete' => [
+        'deploy' => [],
+        'updatedb' => [],
+        'config:import' => [],
+      ],
+      'failed' => [],
+      'messages' => [],
+    ]));
+
+    $this->sendSlackMessage("Beginning updates on `$stack.01$env`.");
     $this->localMachineHelper()->executeParallel($db_commands);
     if ($config_commands) {
+      $delay = $this->commandData->options()['delay-config-import'];
+      if ($delay) {
+        $checklist = new Checklist($this->output());
+        $outputCallback = $this->getOutputCallback($this->output(), $checklist);
+
+        $checklist->addItem('Syncing database');
+        $this->waitTilItsTime($outputCallback, time() + $delay);
+        $checklist->completePreviousItem();
+      }
+
+      $this->sendSlackMessage("Beginning config import on `$stack.01$env`.");
       $this->localMachineHelper()->executeParallel($config_commands);
     }
 
-    $failed = array_unique(array_filter(explode("\n", file_get_contents($failed_report))));
-    if ($failed) {
-      $this->yell('Failed Sites: ' . implode(', ', $failed), 40, 'red');
+    $report = json_decode($fileSystem->readFile($report_file), TRUE);
+    $message = "Deployment complete on `$stack`.";
+    if ($report['failed']) {
+      $this->yell('Failed Sites: ' . implode(', ', array_unique($report['failed'])), 40, 'red');
+      $message .= ' ' . count($report['failed']) . ' had errors. Please review.';
     }
+    $this->sendSlackMessage($message);
   }
 
   /**
@@ -89,12 +127,14 @@ final class AcsfDrushCommands extends DrushCommands {
   #[CLI\Command(name: 'sws:acsf:update-environment:deploy')]
   #[ClI\Option(name: 'env', description: 'ACSF environment: dev, test, or live.')]
   #[ClI\Option(name: 'host', description: 'ACSF Host.')]
+  #[CLI\Option(name: 'slack-hook', description: 'Slack webhook url that is used to send notification updates.')]
   public function updateHostDeploy(array $options = [
     'env' => 'dev',
     'host' => NULL,
+    'slack-hook' => NULL,
   ]
   ) {
-    $aliases = array_keys($this->getSiteAliases($options['env'], $options['host']));
+    $aliases = $this->getSiteAliases($options['env'], $options['host']);
     $this->performUpdate($aliases, ['deploy'], $options['host']);
   }
 
@@ -104,12 +144,14 @@ final class AcsfDrushCommands extends DrushCommands {
   #[CLI\Command(name: 'sws:acsf:update-environment:database')]
   #[ClI\Option(name: 'env', description: 'ACSF environment: dev, test, or live.')]
   #[ClI\Option(name: 'host', description: 'ACSF Host.')]
+  #[CLI\Option(name: 'slack-hook', description: 'Slack webhook url that is used to send notification updates.')]
   public function updateHostDatabase(array $options = [
     'env' => 'dev',
     'host' => NULL,
+    'slack-hook' => NULL,
   ]
   ) {
-    $aliases = array_keys($this->getSiteAliases($options['env'], $options['host']));
+    $aliases = $this->getSiteAliases($options['env'], $options['host']);
     $this->performUpdate($aliases, ['updatedb', '-y'], $options['host']);
   }
 
@@ -119,12 +161,14 @@ final class AcsfDrushCommands extends DrushCommands {
   #[CLI\Command(name: 'sws:acsf:update-environment:config')]
   #[ClI\Option(name: 'env', description: 'ACSF environment: dev, test, or live.')]
   #[ClI\Option(name: 'host', description: 'ACSF Host.')]
+  #[CLI\Option(name: 'slack-hook', description: 'Slack webhook url that is used to send notification updates.')]
   public function updateHostConfig(array $options = [
     'env' => 'dev',
     'host' => NULL,
+    'slack-hook' => NULL,
   ]
   ) {
-    $aliases = array_keys($this->getSiteAliases($options['env'], $options['host']));
+    $aliases = $this->getSiteAliases($options['env'], $options['host']);
     $this->performUpdate($aliases, ['config:import', '-y'], $options['host']);
   }
 
@@ -139,20 +183,11 @@ final class AcsfDrushCommands extends DrushCommands {
    *   Acquia host url.
    */
   protected function performUpdate(array $aliases, array $command, string $host) {
-    $total_aliases = count($aliases);
-    $printOutput = TRUE;
+    $stack = preg_replace('/\..*/', '', reset($aliases)['user']);
+    $report_file = sys_get_temp_dir() . '/' . $stack . '.json';
 
-    foreach ($aliases as $position => $alias) {
-      $percent = round($position / $total_aliases * 100);
-      if ($percent % 5 == 0) {
-        $this->yell($percent . "% on $host");
-      }
-      else {
-        $this->say($percent . "% on $host");
-      }
-      if ($percent > 10) {
-        $printOutput = FALSE;
-      }
+    foreach (array_keys($aliases) as $position => $alias) {
+      $printOutput = round($position / count($aliases) * 100) <= 10;
 
       $tries = 0;
       $this->say($alias);
@@ -165,12 +200,54 @@ final class AcsfDrushCommands extends DrushCommands {
         $tries = $result->isSuccessful() ? 5 : $tries + 1;
       }
 
-      if (!$result->isSuccessful()) {
-        $failed_report = sys_get_temp_dir() . '/failed-report.txt';
-        $this->localMachineHelper()
-          ->getFilesystem()
-          ->appendToFile($failed_report, $alias . PHP_EOL);
+      $writeSuccess = FALSE;
+      while (!$writeSuccess) {
+        $report = json_decode(file_get_contents($report_file), TRUE);
+        $report['complete'][reset($command)][] = $alias;
+
+        if (!$result->isSuccessful()) {
+          $report['failed'][] = $alias;
+        }
+        $writeSuccess = file_put_contents($report_file, json_encode($report, JSON_PRETTY_PRINT), LOCK_EX);
       }
+
+      $this->updateMessage($command, $stack);
+    }
+  }
+
+  /**
+   * Display a status message and send a message to slack with a percent update.
+   *
+   * @param string[] $command
+   *   Drush command being run.
+   * @param string $stack
+   *   Application stack.
+   */
+  protected function updateMessage(array $command, string $stack): void {
+    $command = reset($command);
+
+    $environment = $this->commandData->options()['env'];
+    $total_aliases = count($this->getSiteAliases($environment));
+
+    $report_file = sys_get_temp_dir() . '/' . $stack . '.json';
+    $report = json_decode(file_get_contents($report_file), TRUE);
+
+    $percent = round(count($report['complete'][$command]) / $total_aliases * 100);
+    $this->say(sprintf('%s%% complete', $percent));
+
+    $percent = floor($percent / 10) * 10;
+    $message = sprintf('%s%% completed command `%s` on `%s`.', $percent, $command, "$stack.01$environment");
+
+    if (!in_array($message, $report['messages']) && $percent > 0 && $percent % 10 == 0) {
+      $writeSuccess = FALSE;
+      while (!$writeSuccess) {
+        $report = json_decode(file_get_contents($report_file), TRUE);
+        $report['messages'][] = $message;
+        $writeSuccess = file_put_contents($report_file, json_encode($report, JSON_PRETTY_PRINT), LOCK_EX);
+      }
+
+      $this->yell($message);
+      $this->sendSlackMessage($message);
     }
   }
 
@@ -186,15 +263,19 @@ final class AcsfDrushCommands extends DrushCommands {
    *   Site aliases.
    */
   protected function getSiteAliases(string $environment, ?string $host = NULL): array {
-    $result = $this->localMachineHelper()->execute([
-      'drush',
-      'site:alias',
-      '--format=json',
-    ], NULL, $this->getDir(), FALSE);
-    if (!$result->isSuccessful()) {
-      throw new CommandFailedException($result->getErrorOutput(), $result->getExitCode());
+    static $aliases = [];
+    if (!$aliases) {
+      $result = $this->localMachineHelper()->execute([
+        'drush',
+        'site:alias',
+        '--format=json',
+      ], NULL, $this->getDir(), FALSE);
+
+      if (!$result->isSuccessful()) {
+        throw new CommandFailedException($result->getErrorOutput(), $result->getExitCode());
+      }
+      $aliases = json_decode($result->getOutput(), TRUE, 512, JSON_THROW_ON_ERROR);
     }
-    $aliases = json_decode($result->getOutput(), TRUE, 512, JSON_THROW_ON_ERROR);
 
     foreach ($aliases as $alias => $aliasInfo) {
       if (!str_ends_with($alias, '01' . $environment) || !str_contains($aliasInfo['host'], 'acquia')) {
@@ -205,7 +286,48 @@ final class AcsfDrushCommands extends DrushCommands {
         unset($aliases[$alias]);
       }
     }
+    return array_slice($aliases, 0, 1);
     return $aliases;
+  }
+
+  /**
+   * Send a slack message to the slack-hook.
+   *
+   * @param string $message
+   *   Message for slack.
+   */
+  protected function sendSlackMessage(string $message): void {
+    static $hasFailed = FALSE;
+    if ($hasFailed || !$this->commandData->options()['slack-hook']) {
+      return;
+    }
+
+    $client = new Client();
+    // TODO: use the full API to create threads so it's all in one place.
+    $options = ['json' => ['text' => ':acquia: ' . $message]];
+    try {
+      $client->post($this->commandData->options()['slack-hook'], $options);
+    }
+    catch (\Throwable $e) {
+      $hasFailed = TRUE;
+      $this->say('Failed to send slack notification. ' . $e->getMessage());
+    }
+  }
+
+  /**
+   * Checklist delay countdown.
+   *
+   * @param \Closure $outputCallback
+   * @param int $continue_time
+   *
+   * @return void
+   */
+  protected function waitTilItsTime(\Closure $outputCallback, int $continue_time) {
+    date_default_timezone_set('America/Los_Angeles');
+    while ($continue_time > time()) {
+      $outputCallback('out', sprintf('Sleeping until %s. Current time %s', date('H:i:s', $continue_time), date('H:i:s')));
+      sleep(5);
+    }
   }
 
 }

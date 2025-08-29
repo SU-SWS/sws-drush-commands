@@ -84,6 +84,10 @@ class LocalMachineHelper {
    * Executes multiple buffered commands in parallel.
    */
   public function executeParallel(array $cmds, callable $callback = NULL, string $cwd = NULL, ?bool $printOutput = TRUE, float $timeout = NULL, array $env = NULL, bool $stdin = TRUE): Process {
+    if (!$cmds) {
+      throw new \Exception('Commands are empty');
+    }
+
     if ($callback === NULL && $printOutput !== FALSE) {
       $callback = function(mixed $type, mixed $buffer): void {
         $this->output->write($buffer);
