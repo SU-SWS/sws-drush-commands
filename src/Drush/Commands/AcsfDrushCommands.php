@@ -42,6 +42,10 @@ final class AcsfDrushCommands extends DrushCommands {
     }
 
     $siteAliases = $this->getSiteAliases($env);
+    if (!$siteAliases) {
+      throw new CommandFailedException('No sites to update. Make sure aliases are created by using the `drush aliases` command.');
+    }
+
     $updateHosts = [];
     foreach ($siteAliases as $aliasInfo) {
       $updateHosts[$aliasInfo['host']] = $aliasInfo['host'];
@@ -190,7 +194,6 @@ final class AcsfDrushCommands extends DrushCommands {
       $printOutput = round($position / count($aliases) * 100) <= 10;
 
       $tries = 0;
-      $this->say($alias);
       while ($tries < 3) {
         $result = $this->localMachineHelper()
           ->execute(array_merge([
@@ -207,6 +210,7 @@ final class AcsfDrushCommands extends DrushCommands {
 
         if (!$result->isSuccessful()) {
           $report['failed'][] = $alias;
+          $this->yell($result->getErrorOutput(), 50, 'red');
         }
         $writeSuccess = file_put_contents($report_file, json_encode($report, JSON_PRETTY_PRINT), LOCK_EX);
       }
@@ -263,8 +267,8 @@ final class AcsfDrushCommands extends DrushCommands {
    *   Site aliases.
    */
   protected function getSiteAliases(string $environment, ?string $host = NULL): array {
-    static $aliases = [];
-    if (!$aliases) {
+    static $all_aliases = [];
+    if (!$all_aliases) {
       $result = $this->localMachineHelper()->execute([
         'drush',
         'site:alias',
@@ -274,9 +278,10 @@ final class AcsfDrushCommands extends DrushCommands {
       if (!$result->isSuccessful()) {
         throw new CommandFailedException($result->getErrorOutput(), $result->getExitCode());
       }
-      $aliases = json_decode($result->getOutput(), TRUE, 512, JSON_THROW_ON_ERROR);
+      $all_aliases = json_decode($result->getOutput(), TRUE, 512, JSON_THROW_ON_ERROR);
     }
 
+    $aliases = $all_aliases;
     foreach ($aliases as $alias => $aliasInfo) {
       if (!str_ends_with($alias, '01' . $environment) || !str_contains($aliasInfo['host'], 'acquia')) {
         unset($aliases[$alias]);
@@ -286,7 +291,6 @@ final class AcsfDrushCommands extends DrushCommands {
         unset($aliases[$alias]);
       }
     }
-    return array_slice($aliases, 0, 1);
     return $aliases;
   }
 
