@@ -97,8 +97,8 @@ final class AcsfDrushCommands extends DrushCommands {
       }
     }
 
-    $reportFile = sys_get_temp_dir() . "/$stack.json";
-    $hostReportFiles = array_map(fn($host) => sys_get_temp_dir() . '/' . $stack . '-' . substr(md5($host), 0, 5) . '.json', $updateHosts);
+    $reportFile = sys_get_temp_dir() . "/$stack-$env.json";
+    $hostReportFiles = array_map(fn($host) => sys_get_temp_dir() . '/' . $stack . '-' . substr(md5($host), 0, 5) . "-$env.json", $updateHosts);
 
     // Write the report file to the system. This contains the global progress
     // messages and the reference to each file that is used in the parallel
@@ -243,7 +243,8 @@ final class AcsfDrushCommands extends DrushCommands {
 
     foreach (array_keys($aliases) as $position => $alias) {
       $hostFileName = substr(md5($aliases[$alias]['host']), 0, 5);
-      $reportFile = sys_get_temp_dir() . "/$stack-$hostFileName.json";
+      $env = preg_replace('/^.*\.\d+(\w+)/', '$1', $alias);;
+      $reportFile = sys_get_temp_dir() . "/$stack-$hostFileName-$env.json";
 
       $printOutput = round($position / count($aliases) * 100) <= 5;
       $this->performSiteUpdate($alias, $command, $reportFile, $stack, $printOutput);
@@ -337,7 +338,7 @@ final class AcsfDrushCommands extends DrushCommands {
 
     $environment = $this->commandData->options()['env'];
     $totalAliases = count($this->getSiteAliases($environment));
-    $reportFile = sys_get_temp_dir() . "/$stack.json";
+    $reportFile = sys_get_temp_dir() . "/$stack-$environment.json";
     $report = $this->getUpdateReport($reportFile);
 
     $completed = 0;
