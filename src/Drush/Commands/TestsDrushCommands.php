@@ -125,15 +125,23 @@ final class TestsDrushCommands extends DrushCommands {
   #[CLI\Command(name: 'sws:codeception', aliases: ['codeception'])]
   #[CLI\Option(name: 'site-domain', description: 'Local site domain for testing.')]
   #[CLI\Option(name: 'protocol', description: 'Domain protocol: http or https.')]
+  #[CLI\Option(name: 'test-dir', description: 'A path to codeception tests if not in the `tests` directory.')]
   #[CLI\Option(name: 'suite', description: 'Codeception suite to run.')]
   #[CLI\Option(name: 'group', description: 'Codeception group to run.')]
-  #[CLI\Option(name: 'test-dir', description: 'A path to codeception tests if not in the `tests` directory.')]
+  #[CLI\Option(name: 'shard', description: 'Execute subset of tests to run tests on different machine. To split tests on 3 machines to run with shards: 1/3, 2/3, 3/3.')]
+  #[CLI\Option(name: 'filter', description: 'Filter tests by name.')]
+  #[CLI\Option(name: 'skip-group', description: 'Skip selected groups.')]
+  #[CLI\Option(name: 'fail-fast', description: 'Stop after nth failure.')]
   public function codeception(array $options = [
     'site-domain' => 'localhost',
     'protocol' => 'http',
+    'test-dir' => NULL,
     'suite' => 'acceptance',
     'group' => NULL,
-    'test-dir' => NULL,
+    'shard' => NULL,
+    'filter' => NULL,
+    'skip-group' => NULL,
+    'fail-fast' => NULL,
   ]
   ) {
     $fileSystem = $this->localMachineHelper()->getFilesystem();
@@ -161,8 +169,11 @@ final class TestsDrushCommands extends DrushCommands {
     file_put_contents($this->getDir() . '/tests/codeception.yml', $contents);
 
     $command = "vendor/bin/codecept run {$options['suite']} --steps --config=tests --html";
-    if ($options['group']) {
-      $command .= " --group={$options['group']}";
+    $codeceptOptions = ['group', 'shard', 'filter', 'skip-group', 'fail-fast'];
+    foreach ($codeceptOptions as $opt) {
+      if ($options[$opt]) {
+        $command .= " --$opt=$options[$opt]";
+      }
     }
 
     if (getenv('CI')) {
