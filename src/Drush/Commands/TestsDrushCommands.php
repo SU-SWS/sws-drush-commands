@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace Drupal\SwsDrush\Drush\Commands;
 
 use Drush\Boot\DrupalBootLevels;
+use Drush\Exceptions\CommandFailedException;
 use Symfony\Component\Console\Input\InputOption;
 use Drush\Attributes as CLI;
 use Drush\Commands\DrushCommands;
@@ -24,17 +25,15 @@ final class TestsDrushCommands extends DrushCommands {
   #[CLI\Command(name: 'sws:tests:phpunit-coverage-check')]
   #[CLI\Argument(name: 'xml_directory', description: 'Path to xml coverage directory when using --coverage-xml=[coverage/directory].')]
   #[CLI\Option(name: 'min-coverage', description: 'Minimum coverage percent.')]
-  #[CLI\Option(name: 'upload-coverage-report', description: 'Minimum coverage percent.')]
   #[CLI\Option(name: 'clover-file', description: 'Path to clover.xml file using --coverage-clover=[clover/file.xml]')]
   public function testPhpUnitCoverage(string $xml_directory, array $options = [
     'min-coverage' => 90,
-    'upload-coverage-report' => FALSE,
     'clover-file' => InputOption::VALUE_OPTIONAL,
   ]
   ) {
     $report = "$xml_directory/index.xml";
     if (!file_exists($report)) {
-      throw new \Exception('Coverage report not found at ' . $report);
+      throw new CommandFailedException('Coverage report not found at ' . $report);
     }
 
     libxml_use_internal_errors(TRUE);
@@ -47,56 +46,51 @@ final class TestsDrushCommands extends DrushCommands {
 
     $min = $options['min-coverage'];
     if ($min > $percent) {
-      throw new \Exception("Test coverage is only at $percent%. $min% is required.");
+      throw new CommandFailedException("Test coverage is only at $percent%. $min% is required.");
     }
     $this->yell(sprintf('Coverage at %s%%. %s%% required.', $percent, $min));
-
-    if ($options['upload-coverage-report']) {
-      if (!getenv('CC_TEST_REPORTER_ID')) {
-        throw new \Exception('Coverage report upload requires CC_TEST_REPORTER_ID environment variable.');
-      }
-
-      $this->ensureOption('clover-file', fn() => $this->io()
-        ->ask('Path to clover file.'), TRUE);
-      $this->uploadCoverageCodeClimate($this->input()
-        ->getOption('clover-file'));
-    }
   }
 
   /**
-   * Use CodeClimate CLI to upload the phpunit coverage report.
-   *
-   * @link https://docs.codeclimate.com/docs/circle-ci-test-coverage-example
+   * Scaffold and run phpunit tests.
    */
-  public function uploadCoverageCodeClimate(string $coverage_file) {
-    if (!file_exists($coverage_file)) {
-      throw new \Exception('No coverage to upload to code climate.');
-    }
-
-    $this->localMachineHelper()
-      ->executeFromCmd('curl -L https://codeclimate.com/downloads/test-reporter/test-reporter-latest-linux-amd64 > ./cc-test-reporter', NULL, $this->dir, FALSE);
-
-    $this->localMachineHelper()
-      ->executeFromCmd('chmod +x ./cc-test-reporter', NULL, $this->dir, FALSE);
-
-    copy($coverage_file, $this->dir . '/clover.xml');
-    $result = $this->localMachineHelper()
-      ->executeFromCmd('./cc-test-reporter after-build -t clover', NULL, $this->dir, FALSE);
-    if (!$result->isSuccessful()) {
-      throw new \Exception('Failed to upload coverage report.');
-    }
-  }
-
-  /**
-   * Scaffold and prep phpunit tests.
-   */
-  #[CLI\Command(name: 'sws:source:tests:phpunit')]
+  #[CLI\Command(name: 'sws:source:tests:phpunit', aliases: ['phpunit'])]
   #[CLI\Option(name: 'db-user', description: 'Database user name')]
   #[CLI\Option(name: 'db-pass', description: 'Database password')]
   #[CLI\Option(name: 'db-host', description: 'Database host')]
   #[CLI\Option(name: 'db-name', description: 'Database name')]
   #[CLI\Option(name: 'with-coverage', description: 'Run test with coverage report.')]
   public function phpUnit(array $options = [
+    'db-user' => 'root',
+    'db-pass' => 'password',
+    'db-host' => 'localhost',
+    'db-name' => 'drupal',
+    'with-coverage' => FALSE,
+  ]
+  ) {
+    $this->phpUnitConfig($options);
+
+    $testCommand = '../vendor/bin/phpunit --configuration=core --filter="/(Unit|Kernel)/" --testsuite=stanford';
+    if ($options['with-coverage']) {
+      $testCommand .= ' --log-junit=../artifacts/phpunit/results.xml --coverage-html=../artifacts/phpunit/coverage/html --coverage-xml=../artifacts/phpunit/coverage/xml --coverage-clover=../artifacts/phpunit/coverage/clover.xml';
+    }
+    $this->say($testCommand);
+    $result = $this->localMachineHelper()
+      ->executeFromCmd($testCommand, NULL, $this->getDir() . '/docroot/');
+    if (!$result->isSuccessful()) {
+      throw new CommandFailedException('PHPUnit tests failed', $result->getExitCode());
+    }
+  }
+
+  /**
+   * Scaffold phpunit tests.
+   */
+  #[CLI\Command(name: 'sws:source:tests:phpunit:config', aliases: ['phpunit:config'])]
+  #[CLI\Option(name: 'db-user', description: 'Database user name')]
+  #[CLI\Option(name: 'db-pass', description: 'Database password')]
+  #[CLI\Option(name: 'db-host', description: 'Database host')]
+  #[CLI\Option(name: 'db-name', description: 'Database name')]
+  public function phpUnitConfig(array $options = [
     'db-user' => 'root',
     'db-pass' => 'password',
     'db-host' => 'localhost',
@@ -123,14 +117,6 @@ final class TestsDrushCommands extends DrushCommands {
     $contents = str_replace('${drupal.db.database}', $dbName, $contents);
 
     file_put_contents($this->getDir() . '/docroot/core/phpunit.xml', $contents);
-
-    $testCommand = '../vendor/bin/phpunit --configuration=core --filter="/(Unit|Kernel)/" --testsuite=stanford';
-    if ($options['with-coverage']) {
-      $testCommand .= ' --log-junit=../artifacts/phpunit/results.xml --coverage-html=../artifacts/phpunit/coverage/html --coverage-xml=../artifacts/phpunit/coverage/xml --coverage-clover=../artifacts/phpunit/coverage/clover.xml';
-    }
-    $this->say($testCommand);
-    $this->localMachineHelper()
-      ->executeFromCmd($testCommand, NULL, $this->getDir() . '/docroot/');
   }
 
   /**
@@ -139,15 +125,23 @@ final class TestsDrushCommands extends DrushCommands {
   #[CLI\Command(name: 'sws:codeception', aliases: ['codeception'])]
   #[CLI\Option(name: 'site-domain', description: 'Local site domain for testing.')]
   #[CLI\Option(name: 'protocol', description: 'Domain protocol: http or https.')]
+  #[CLI\Option(name: 'test-dir', description: 'A path to codeception tests if not in the `tests` directory.')]
   #[CLI\Option(name: 'suite', description: 'Codeception suite to run.')]
   #[CLI\Option(name: 'group', description: 'Codeception group to run.')]
-  #[CLI\Option(name: 'test-dir', description: 'A path to codeception tests if not in the `tests` directory.')]
+  #[CLI\Option(name: 'shard', description: 'Execute subset of tests to run tests on different machine. To split tests on 3 machines to run with shards: 1/3, 2/3, 3/3.')]
+  #[CLI\Option(name: 'filter', description: 'Filter tests by name.')]
+  #[CLI\Option(name: 'skip-group', description: 'Skip selected groups.')]
+  #[CLI\Option(name: 'fail-fast', description: 'Stop after nth failure.')]
   public function codeception(array $options = [
     'site-domain' => 'localhost',
     'protocol' => 'http',
+    'test-dir' => NULL,
     'suite' => 'acceptance',
     'group' => NULL,
-    'test-dir' => NULL,
+    'shard' => NULL,
+    'filter' => NULL,
+    'skip-group' => NULL,
+    'fail-fast' => NULL,
   ]
   ) {
     $fileSystem = $this->localMachineHelper()->getFilesystem();
@@ -155,7 +149,7 @@ final class TestsDrushCommands extends DrushCommands {
     if ($options['test-dir']) {
       $testDir = Path::join($this->getDir(), $options['test-dir'], $options['suite']);
       if (!$fileSystem->exists($testDir)) {
-        throw new \Exception('Test directory does not exist: ' . $testDir);
+        throw new CommandFailedException('Test directory does not exist: ' . $testDir);
       }
       $symLinkDir = Path::join($this->getDir(), 'tests', 'codeception', $options['suite'], 'temp');
       $fileSystem->symlink($testDir, $symLinkDir);
@@ -175,8 +169,11 @@ final class TestsDrushCommands extends DrushCommands {
     file_put_contents($this->getDir() . '/tests/codeception.yml', $contents);
 
     $command = "vendor/bin/codecept run {$options['suite']} --steps --config=tests --html";
-    if ($options['group']) {
-      $command .= " --group={$options['group']}";
+    $codeceptOptions = ['group', 'shard', 'filter', 'skip-group', 'fail-fast'];
+    foreach ($codeceptOptions as $opt) {
+      if ($options[$opt]) {
+        $command .= " --$opt=$options[$opt]";
+      }
     }
 
     if (getenv('CI')) {
@@ -187,11 +184,11 @@ final class TestsDrushCommands extends DrushCommands {
       ->executeFromCmd($command, NULL, $this->getDir());
 
     if (!file_exists('artifacts/report.html')) {
-      throw new \Exception('Codeception failed');
+      throw new CommandFailedException('Codeception failed', $result->getExitCode());
     }
 
-    if (!$result->isSuccessful()) {
-      $command = "vendor/bin/codecept run {$options['suite']} --steps --config=tests --html --group=failed";
+    if (!$result->isSuccessful() && getenv('CI')) {
+      $command = "vendor/bin/codecept run {$options['suite']} --steps --config=tests --html --group=failed --env=ci";
       $result = $this->localMachineHelper()
         ->executeFromCmd($command, NULL, $this->getDir());
     }
@@ -200,7 +197,7 @@ final class TestsDrushCommands extends DrushCommands {
       $fileSystem->remove($symLinkDir);
     }
     if (!$result->isSuccessful() || !file_exists('artifacts/report.html')) {
-      throw new \Exception('Codeception failed');
+      throw new CommandFailedException('Codeception failed', $result->getExitCode());
     }
   }
 

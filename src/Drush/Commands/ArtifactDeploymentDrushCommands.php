@@ -128,7 +128,7 @@ final class ArtifactDeploymentDrushCommands extends DrushCommands {
     if ($options['post-build-script']) {
       $this->checklist->addItem('Running post-build script');
       $process = $this->localmachineHelper()
-        ->executeFromCmd($options['post-build-script'], $outputCallback, $artifactDir, TRUE);
+        ->executeFromCmd($options['post-build-script'], $outputCallback, $artifactDir);
       if (!$process->isSuccessful()) {
         $this->io()->error($process->getCommandLine());
         $this->io()->error($process->getOutput());
@@ -142,7 +142,8 @@ final class ArtifactDeploymentDrushCommands extends DrushCommands {
     $this->checklist->completePreviousItem();
 
     if (!$options['no-push']) {
-      $this->checklist->addItem("Pushing changes to <options=bold>$this->destinationGitRef</> $refType.");
+      $dest = $refType == 'branch'? $this->destinationGitRef: $this->destinationTag;
+      $this->checklist->addItem("Pushing changes to <options=bold>$dest</> $refType.");
       $this->pushArtifact($outputCallback, $artifactDir, $destinationGitUrls, $this->destinationGitRef . ':' . $this->destinationGitRef, $refType);
       $this->checklist->completePreviousItem();
       $this->logger()->success(dt('Artifact successfully built and pushed.'));
@@ -228,7 +229,6 @@ final class ArtifactDeploymentDrushCommands extends DrushCommands {
     $process = $this->localmachineHelper()->execute([
       'git',
       'clone',
-      '--depth=1',
       $vcsUrl,
       $artifactDir,
     ],
@@ -241,8 +241,6 @@ final class ArtifactDeploymentDrushCommands extends DrushCommands {
     $process = $this->localmachineHelper()->execute([
       'git',
       'fetch',
-      '--depth=1',
-      '--update-head-ok',
       $vcsUrl,
       $vcsPath . ':' . $vcsPath,
     ],
@@ -454,7 +452,7 @@ final class ArtifactDeploymentDrushCommands extends DrushCommands {
         $this->io->warning("Unable to forcibly add $file to new branch");
       }
     }
-    $commitMessage = $this->generateCommitMessage();
+    $commitMessage = $this->generateCommitMessage() ?: $tag;
     $process = $this->localmachineHelper()->execute([
       'git',
       'commit',
@@ -537,6 +535,8 @@ final class ArtifactDeploymentDrushCommands extends DrushCommands {
    */
   private function pushArtifact(\Closure $outputCallback, string $artifactDir, array $vcsUrls, string $destGit, string $destType = 'branch'): void {
     $this->localmachineHelper()->checkRequiredBinariesExist(['git']);
+    $this->localmachineHelper()->execute(['git', 'config', '--global', 'http.postBuffer', 268435456]);
+
     foreach ($vcsUrls as $vcsUrl) {
       $outputCallback('out', "Pushing changes to Git ($vcsUrl)");
       $args = $destType == 'branch' ? [
@@ -549,7 +549,7 @@ final class ArtifactDeploymentDrushCommands extends DrushCommands {
         'push',
         $vcsUrl,
         'tag',
-        $destGit,
+        $this->destinationTag,
       ];
       $process = $this->localmachineHelper()->execute(
         $args,

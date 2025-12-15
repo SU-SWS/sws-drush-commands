@@ -8,6 +8,7 @@ use Drupal\SwsDrush\Helpers\AcquiaApi;
 use Drush\Attributes as CLI;
 use Drush\Boot\DrupalBootLevels;
 use Drush\Commands\DrushCommands;
+use Drush\Exceptions\CommandFailedException;
 use Symfony\Component\Console\Input\InputOption;
 
 /**
@@ -40,7 +41,7 @@ final class AcquiaCleanupDrushCommands extends DrushCommands {
 
     $application = $acquiaApi->acquiaApplications->get($appId);
     if ($application->hosting->type == 'acsf') {
-      throw new \Exception('ACSF Applications are not supported. Only single applications (ACE, ACN) are supported.');
+      throw new CommandFailedException('ACSF Applications are not supported. Only single applications (ACE, ACN) are supported.');
     }
 
     $environments = $this->safelyRunAcquiaRequest($acquiaApi, [
@@ -158,7 +159,7 @@ final class AcquiaCleanupDrushCommands extends DrushCommands {
       '--remotes',
     ], NULL, "$root/deploy", FALSE);
     if (!$result->isSuccessful()) {
-      throw new \Exception('Failed getting branch names.');
+      throw new CommandFailedException('Failed getting branch names.', $result->getExitCode());
     }
     $branches = explode("\n", $result->getOutput());
 
@@ -177,7 +178,7 @@ final class AcquiaCleanupDrushCommands extends DrushCommands {
       '-l',
     ], NULL, "$root/deploy", FALSE);
     if (!$result->isSuccessful()) {
-      throw new \Exception('Failed getting tag names.');
+      throw new CommandFailedException('Failed getting tag names.', $result->getExitCode());
     }
 
     $tags = explode("\n", $result->getOutput());
@@ -189,27 +190,37 @@ final class AcquiaCleanupDrushCommands extends DrushCommands {
       }
     }
 
-    $perform_branch_delete = $this->confirm(sprintf('Are you sure you wish to delete the following branches? %s', implode(', ', $remove_branches)));
-    $perform_tag_delete = $this->confirm(sprintf('Are you sure you wish to delete the following tags? %s', implode(', ', $remove_tags)));
+    $perform_branch_delete = TRUE;
+    $perform_tag_delete = TRUE;
+    if ($this->input()->isInteractive()) {
+      $perform_branch_delete = $this->confirm(sprintf('Are you sure you wish to delete the following branches? %s', implode(', ', $remove_branches)));
+      $perform_tag_delete = $this->confirm(sprintf('Are you sure you wish to delete the following tags? %s', implode(', ', $remove_tags)));
+    }
     if ($perform_branch_delete) {
-      foreach ($remove_branches as $branch) {
-        $this->localMachineHelper()->execute([
+      foreach (array_filter($remove_branches) as $branch) {
+        $result = $this->localMachineHelper()->execute([
           'git',
           'push',
           '-d',
           'origin',
           $branch,
         ], NULL, "$root/deploy");
+        if (!$result->isSuccessful()) {
+          throw new CommandFailedException('Failed Deleting branch ' . $branch, $result->getExitCode());
+        }
       }
     }
     if ($perform_tag_delete) {
-      foreach ($remove_tags as $tag) {
-        $this->localMachineHelper()->execute([
+      foreach (array_filter($remove_tags) as $tag) {
+        $result = $this->localMachineHelper()->execute([
           'git',
           'push',
           'origin',
-          ":res/tags/$tag",
+          ":refs/tags/$tag",
         ], NULL, "$root/deploy");
+        if (!$result->isSuccessful()) {
+          throw new CommandFailedException('Failed Deleting tag ' . $tag, $result->getExitCode());
+        }
       }
     }
   }

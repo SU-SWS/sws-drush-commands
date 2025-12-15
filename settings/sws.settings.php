@@ -85,10 +85,16 @@ $settings_files = [];
  */
 // phpcs:ignore
 $site_name = EnvironmentDetector::getSiteName($site_path);
+
+$settings_files[] = DRUPAL_ROOT . "/sites/settings/early.settings.php";
+$settings_files[] = DRUPAL_ROOT . "/sites/$site_name/settings/early.settings.php";
+
 // Acquia Cloud settings.
 if (EnvironmentDetector::isAhEnv()) {
   try {
     if (!EnvironmentDetector::isAcsfEnv()) {
+      // Pull in Acquia environment settings file. This eliminates the need to
+      // add the Acquia require line in settings.php.
       $settings_files[] = FilePaths::ahSettingsFile(EnvironmentDetector::getAhGroup(), $site_name);
     }
   }

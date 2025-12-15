@@ -13,7 +13,8 @@ use Drush\Commands\DrushCommands;
  * A Drush command file.
  */
 #[CLI\Bootstrap(level: DrupalBootLevels::NONE)]
-final class SettingsDrushCommands extends DrushCommands {
+final class SettingsDrushCommands extends DrushCommands
+{
 
   use SwsCommandsTrait;
 
@@ -24,7 +25,8 @@ final class SettingsDrushCommands extends DrushCommands {
   public function getDrushConfig(string $config, array $options = [
     'format' => 'text',
   ]
-  ) {
+  )
+  {
     $value = $this->getConfig()->get($config);
     if ($options['format'] === 'json') {
       echo json_encode($value);
@@ -60,7 +62,8 @@ final class SettingsDrushCommands extends DrushCommands {
     'db-name' => 'drupal',
     'multisites' => ['default'],
   ]
-  ) {
+  )
+  {
     $sites_dir = $this->getDir() . '/docroot/sites';
 
     // Generate hash file in salt.txt.
@@ -80,6 +83,10 @@ final class SettingsDrushCommands extends DrushCommands {
       '${drupal.db.database}' => $options['db-name'],
     ];
     $file_system = $this->localmachineHelper()->getFilesystem();
+
+    $global_copy_map = [
+      "/$sites_dir/settings/default.local.settings.php" => "/$sites_dir/settings/local.settings.php"
+    ];
 
     foreach ($options['multisites'] as $multisite) {
       // Generate settings.php.
@@ -101,7 +108,7 @@ final class SettingsDrushCommands extends DrushCommands {
       $default_local_drush_file = "$multisite_dir/default.local.drush.yml";
       $project_local_drush_file = "$multisite_dir/local.drush.yml";
 
-      $copy_map = [
+      $copy_map = $global_copy_map + [
         $blt_local_settings_file => $default_local_settings_file,
         $default_local_settings_file => $project_local_settings_file,
         $blt_includes_settings_file => $default_includes_settings_file,
@@ -119,7 +126,7 @@ final class SettingsDrushCommands extends DrushCommands {
 
       // Copy files without overwriting.
       foreach ($copy_map as $from => $to) {
-        if (!$file_system->exists($to)) {
+        if ($file_system->exists($from) && !$file_system->exists($to)) {
           $file_system->copy($from, $to);
         }
       }
@@ -145,7 +152,8 @@ final class SettingsDrushCommands extends DrushCommands {
     'dhsi',
     'setup:hash-salt',
   ])]
-  public function hashSalt() {
+  public function hashSalt()
+  {
     $file_system = $this->localmachineHelper()->getFilesystem();
     $hash_salt_file = $this->getDir() . '/salt.txt';
 

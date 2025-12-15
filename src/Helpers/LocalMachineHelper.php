@@ -81,6 +81,59 @@ class LocalMachineHelper {
   }
 
   /**
+   * Executes multiple buffered commands in parallel.
+   */
+  public function executeParallel(array $cmds, callable $callback = NULL, string $cwd = NULL, ?bool $printOutput = TRUE, float $timeout = NULL, array $env = NULL, bool $stdin = TRUE): Process {
+    if (!$cmds) {
+      throw new \Exception('Commands are empty');
+    }
+
+    if ($callback === NULL && $printOutput !== FALSE) {
+      $callback = function(mixed $type, mixed $buffer): void {
+        $this->output->write($buffer);
+      };
+    }
+
+    $processes = [];
+    foreach ($cmds as $cmd) {
+      $process = new Process($cmd);
+      $this->configureProcess($process, $cwd, $printOutput, $timeout, $env, $stdin);
+      $process->start();
+      $processes[] = $process;
+    }
+    $failedTask = NULL;
+    $commands = [];
+    do {
+      usleep(1000);
+      foreach ($processes as $key => $process) {
+        $process->wait($callback);
+
+        if (!$process->isRunning()) {
+          $commands[$process->getCommandLine()] = $process->getExitCode();
+          unset($processes[$key]);
+
+          if (!$process->isSuccessful()) {
+            $failedTask = $process;
+          }
+          else {
+            $successTask = $process;
+          }
+        }
+      }
+    }
+    while (count($processes) > 0);
+
+    foreach ($commands as $command => $exit) {
+      $this->logger->notice('Command: {command} [Exit: {exit}]', [
+        'command' => $command,
+        'exit' => $exit,
+      ]);
+    }
+
+    return $failedTask ?: $successTask;
+  }
+
+  /**
    * Executes a command directly in a shell (without additional parsing).
    *
    * Use `execute()` instead whenever possible. `executeFromCmd()` does not
