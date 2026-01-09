@@ -74,7 +74,7 @@ final class MultisiteDrushCommands extends DrushCommands {
 
       $options['multisites'][] = $site_name;
       asort($options['multisites']);
-      $drush_config['command']['sws']['options']['multisites'] = $options['multisites'];
+      $drush_config['command']['sws']['options']['multisites'] = array_values($options['multisites']);
 
       file_put_contents($this->getDir() . '/drush/drush.yml', Yaml::dump($drush_config, 99, 2));
     }
