@@ -49,11 +49,14 @@ final class MultisiteDrushCommands extends DrushCommands {
     $default_site_dir = $this->getDir() . '/docroot/sites/default';
 
     $this->localMachineHelper()->execute([
-      'rsync -r',
+      'rsync',
+      '-r',
       $default_site_dir,
       $new_site_dir,
-      '--exclude local.settings.php',
-      '--exclude files',
+      '--exclude',
+      'local.settings.php',
+      '--exclude',
+      'files',
     ], NULL, $this->getDir());
     $this->say("New site generated at <comment>$new_site_dir</comment>");
 
