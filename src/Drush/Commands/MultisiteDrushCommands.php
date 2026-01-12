@@ -51,7 +51,7 @@ final class MultisiteDrushCommands extends DrushCommands {
     $this->localMachineHelper()->execute([
       'rsync',
       '-r',
-      $default_site_dir,
+      $default_site_dir . '/',
       $new_site_dir,
       '--exclude',
       'local.settings.php',
