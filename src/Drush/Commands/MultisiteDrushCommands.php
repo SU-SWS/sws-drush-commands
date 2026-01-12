@@ -62,8 +62,13 @@ final class MultisiteDrushCommands extends DrushCommands {
 
     if (file_exists($this->getDir() . '/drush/sites/default.site.yml')) {
       $new_alias = Yaml::parseFile($this->getDir() . '/drush/sites/default.site.yml');
-      foreach ($new_alias as &$alias) {
-        $alias['uri'] = $site_name;
+      // Set the URI for each alias based on the environment.
+      foreach ($new_alias as $env => &$alias) {
+        if ($env === 'local') {
+          $alias['uri'] = $site_name;
+        } else {
+          $alias['uri'] = "{$site_name}-{$env}.stanford.edu";
+        }
       }
       file_put_contents($this->getDir() . "/drush/sites/$site_name.site.yml", Yaml::dump($new_alias, 99, 2));
       $this->say("Drush aliases generated: @$site_name");
