@@ -60,6 +60,18 @@ final class MultisiteDrushCommands extends DrushCommands {
     ], NULL, $this->getDir());
     $this->say("New site generated at <comment>$new_site_dir</comment>");
 
+    // Update sws.yml for the new site to set the correct remote-alias.
+    $sws_yml_path = $new_site_dir . '/sws.yml';
+    if (file_exists($sws_yml_path)) {
+      $sws = Yaml::parseFile($sws_yml_path);
+      if (!isset($sws['site'])) {
+        $sws['site'] = [];
+      }
+      $sws['site']['remote-alias'] = "$site_name.prod";
+      file_put_contents($sws_yml_path, Yaml::dump($sws, 2, 2));
+      $this->say("Updated remote-alias in $sws_yml_path to @$site_name.prod");
+    }
+
     if (file_exists($this->getDir() . '/drush/sites/default.site.yml')) {
       $new_alias = Yaml::parseFile($this->getDir() . '/drush/sites/default.site.yml');
       // Set the URI for each alias based on the environment.
