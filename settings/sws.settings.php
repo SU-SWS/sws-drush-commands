@@ -2,7 +2,7 @@
 
 /**
  * @file
- * Setup BLT utility variables, include required files.
+ * Setup SWS utility variables, include required files.
  */
 
 use Drupal\SwsDrush\Helpers\EnvironmentDetector;
@@ -68,9 +68,9 @@ if ($ip) {
  * a global (all sites) and site-specific component. The entire order is:
  *
  * 1. Acquia Cloud settings (including secret settings)
- * 2. Default general settings (provided by BLT)
+ * 2. Default general settings (provided by SWS)
  * 3. Custom general settings (provided by the project)
- * 4. Default CI settings (provided by BLT)
+ * 4. Default CI settings (provided by SWS)
  * 5. Custom CI settings (provided by the project)
  * 6. Local settings (provided by the project)
  */
@@ -110,15 +110,15 @@ if (EnvironmentDetector::isAhEnv()) {
 }
 
 // Default global settings.
-$blt_settings_files = [
+$sws_settings_files = [
   'cache',
   'config',
   'logging',
   'filesystem',
   'misc',
 ];
-foreach ($blt_settings_files as $blt_settings_file) {
-  $settings_files[] = __DIR__ . "/$blt_settings_file.settings.php";
+foreach ($sws_settings_files as $sws_settings_file) {
+  $settings_files[] = __DIR__ . "/$sws_settings_file.settings.php";
 }
 
 // Custom global and site-specific settings.
