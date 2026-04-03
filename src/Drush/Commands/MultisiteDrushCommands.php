@@ -415,8 +415,9 @@ final class MultisiteDrushCommands extends DrushCommands {
       $this->output()->writeln("Running $label on <comment>$site</comment>...");
       $result = $this->localMachineHelper()->execute([
         'drush',
-        '@' . $site,
+        '@self',
         $drushCommand,
+        "--uri=$site",
       ], NULL, $this->getDir());
       if (!$result->isSuccessful()) {
         $failed[] = $site;
