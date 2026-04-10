@@ -121,15 +121,16 @@ class LocalMachineHelper {
         if ($stdErr !== '') {
           foreach (explode("\n", $stdErr) as $line) {
             if ($line !== '') {
-              $callback(Process::ERR, $processPrefix . "[ERR] " . $line . "\n");
+              $callback(Process::ERR, $processPrefix . "[stdErr] " . $line . "\n");
             }
           }
         }
 
         if (!$process->isRunning()) {
-          $commands[$process->getCommandLine()] = $process->getExitCode();
-          $processOutput[$process->getCommandLine()] = $process->getOutput();
-          $processErrorOutput[$process->getCommandLine()] = $process->getErrorOutput();
+          $cmdLine = $process->getCommandLine();
+          $commands[$cmdLine] = $process->getExitCode();
+          $processOutput[$cmdLine] = $process->getOutput();
+          $processErrorOutput[$cmdLine] = $process->getErrorOutput();
           unset($processes[$key]);
 
           if (!$process->isSuccessful()) {
@@ -149,11 +150,11 @@ class LocalMachineHelper {
         'exit' => $exit,
       ]);
       if ($processOutput[$command] !== '') {
-        $this->output->write("--- Standard Output ---\n");
+        $this->output->write("--- stdOut Output ---\n");
         $this->output->write($processOutput[$command]);
       }
       if ($processErrorOutput[$command] !== '') {
-        $this->output->write("--- Error Output ---\n");
+        $this->output->write("--- stdErr Output ---\n");
         $this->output->write($processErrorOutput[$command]);
       }
     }
