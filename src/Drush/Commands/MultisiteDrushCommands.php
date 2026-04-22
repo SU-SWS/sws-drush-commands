@@ -126,7 +126,7 @@ final class MultisiteDrushCommands extends DrushCommands {
       $siteProfile = $config->get('site.profile');
     }
 
-    $this->localMachineHelper()->execute([
+    $result = $this->localMachineHelper()->execute([
       'drush',
       'site-install',
       $siteProfile ?: $defaultProfile,
@@ -134,6 +134,10 @@ final class MultisiteDrushCommands extends DrushCommands {
       '-v',
       '-y',
     ], NULL, $this->getDir());
+    // Throw an exception if the command failed, which will stop execution.
+    if (!$result->isSuccessful()) {
+      throw new CommandFailedException('Failed to install site: ' . $result->getErrorOutput(), $result->getExitCode());
+    }
   }
 
   /**
