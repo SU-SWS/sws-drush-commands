@@ -342,7 +342,8 @@ final class MultisiteDrushCommands extends DrushCommands {
         'This will sync the databases for the following sites from prod to the %s environment:<comment> %s. </comment>Continue?',
         $to_env,
         implode(', ', $sites)
-      )
+      ),
+      TRUE
     )) {
       return;
     }
