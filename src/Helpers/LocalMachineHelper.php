@@ -150,11 +150,11 @@ class LocalMachineHelper {
         'exit' => $exit,
       ]);
       if ($processOutput[$command] !== '') {
-        $this->output->write("--- stdOut Output ---\n");
+        $this->output->write("\n--- stdOut Output ---\n");
         $this->output->write($processOutput[$command]);
       }
       if ($processErrorOutput[$command] !== '') {
-        $this->output->write("--- stdErr Output ---\n");
+        $this->output->write("\n--- stdErr Output ---\n");
         $this->output->write($processErrorOutput[$command]);
       }
     }
