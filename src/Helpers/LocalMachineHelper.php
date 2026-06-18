@@ -109,21 +109,13 @@ class LocalMachineHelper {
         $processPrefix = "[Process $key] ";
 
         $stdOut = $process->getIncrementalOutput();
-        if ($stdOut !== '') {
-          foreach (explode("\n", $stdOut) as $line) {
-            if ($line !== '') {
-              $callback(Process::OUT, $processPrefix . $line . "\n");
-            }
-          }
+        foreach (array_filter(explode(PHP_EOL, $stdOut)) as $line) {
+          $callback(Process::OUT, $processPrefix . $line . PHP_EOL);
         }
 
         $stdErr = $process->getIncrementalErrorOutput();
-        if ($stdErr !== '') {
-          foreach (explode("\n", $stdErr) as $line) {
-            if ($line !== '') {
-              $callback(Process::ERR, $processPrefix . "[stdErr] " . $line . "\n");
-            }
-          }
+        foreach (array_filter(explode(PHP_EOL, $stdErr)) as $line) {
+          $callback(Process::ERR, $processPrefix . "[stdErr] " . $line . PHP_EOL);
         }
 
         if (!$process->isRunning()) {
