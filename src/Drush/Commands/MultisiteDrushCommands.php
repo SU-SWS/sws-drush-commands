@@ -260,10 +260,13 @@ final class MultisiteDrushCommands extends DrushCommands {
     $success_report = array_filter(explode("\n", file_get_contents(sys_get_temp_dir() . '/success-report.txt')));
     $failed_report = array_filter(explode("\n", file_get_contents(sys_get_temp_dir() . '/failed-report.txt')));
 
+    $env = getenv('AH_SITE_ENVIRONMENT') ?: 'unknown';
     $this->yell(sprintf('Updated %s sites successfully.', count($success_report)), 100);
+    $this->sendWebhookNotification(sprintf('Deployment to %s: %d sites updated successfully.', $env, count($success_report)));
 
     if ($failed_report) {
       $this->yell(sprintf("Update failed for the following sites:\n%s", implode("\n", $failed_report)), 100, 'red');
+      $this->sendWebhookNotification(sprintf('Deployment to %s failed for: %s', $env, implode(', ', $failed_report)));
       throw new CommandFailedException('Failed update');
     }
   }
@@ -357,8 +360,8 @@ final class MultisiteDrushCommands extends DrushCommands {
 
     $this->yell(count($sites) . " databases have been copied to $to_env.");
 
-    if (!$no_notify && getenv('SLACK_NOTIFICATION_URL')) {
-      $this->say('Slack notification sent.');
+    if (!$no_notify) {
+      $this->sendWebhookNotification(sprintf('%d databases synced from prod to %s.', count($sites), $to_env));
     }
   }
 
@@ -433,7 +436,9 @@ final class MultisiteDrushCommands extends DrushCommands {
     }
     if ($failed) {
       $this->output()->writeln("$label failed on the following sites: " . implode(', ', $failed));
-    } else {
+      $this->sendWebhookNotification(sprintf('%s failed on: %s', $label, implode(', ', $failed)));
+    }
+    else {
       $this->output()->writeln("$label completed successfully on all sites.");
     }
   }
