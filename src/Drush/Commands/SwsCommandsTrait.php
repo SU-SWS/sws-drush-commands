@@ -8,6 +8,7 @@ use Drupal\SwsDrush\Helpers\AcquiaApi;
 use Drupal\SwsDrush\Helpers\LocalMachineHelper;
 use Drupal\SwsDrush\Output\Checklist;
 use Drush\Drush;
+use GuzzleHttp\Client;
 use Symfony\Component\Console\Output\OutputInterface;
 
 trait SwsCommandsTrait {
@@ -65,6 +66,24 @@ trait SwsCommandsTrait {
     }
 
     $this->input->setOption($name, $value);
+  }
+
+  /**
+   * Send a message to a Slack incoming webhook URL.
+   *
+   * Silently does nothing if no URL is available.
+   */
+  protected function sendWebhookNotification(string $message, ?string $url = NULL): void {
+    $url = $url ?: getenv('SLACK_NOTIFICATION_URL');
+    if (!$url) {
+      return;
+    }
+    try {
+      (new Client())->post($url, ['json' => ['text' => $message]]);
+    }
+    catch (\Throwable $e) {
+      $this->say('Failed to send Slack notification: ' . $e->getMessage());
+    }
   }
 
   /**

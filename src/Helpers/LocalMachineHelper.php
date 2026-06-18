@@ -104,12 +104,25 @@ class LocalMachineHelper {
     $failedTask = NULL;
     $commands = [];
     do {
-      usleep(1000);
+      usleep(50000);
       foreach ($processes as $key => $process) {
-        $process->wait($callback);
+        $processPrefix = "[Process $key] ";
+
+        $stdOut = $process->getIncrementalOutput();
+        foreach (array_filter(explode(PHP_EOL, $stdOut)) as $line) {
+          $callback(Process::OUT, $processPrefix . $line . PHP_EOL);
+        }
+
+        $stdErr = $process->getIncrementalErrorOutput();
+        foreach (array_filter(explode(PHP_EOL, $stdErr)) as $line) {
+          $callback(Process::ERR, $processPrefix . "[stdErr] " . $line . PHP_EOL);
+        }
 
         if (!$process->isRunning()) {
-          $commands[$process->getCommandLine()] = $process->getExitCode();
+          $cmdLine = $process->getCommandLine();
+          $commands[$cmdLine] = $process->getExitCode();
+          $processOutput[$cmdLine] = $process->getOutput();
+          $processErrorOutput[$cmdLine] = $process->getErrorOutput();
           unset($processes[$key]);
 
           if (!$process->isSuccessful()) {
@@ -128,6 +141,14 @@ class LocalMachineHelper {
         'command' => $command,
         'exit' => $exit,
       ]);
+      if ($processOutput[$command] !== '') {
+        $this->output->write("\n--- stdOut Output ---\n");
+        $this->output->write($processOutput[$command]);
+      }
+      if ($processErrorOutput[$command] !== '') {
+        $this->output->write("\n--- stdErr Output ---\n");
+        $this->output->write($processErrorOutput[$command]);
+      }
     }
 
     return $failedTask ?: $successTask;

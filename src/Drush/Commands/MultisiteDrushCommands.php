@@ -49,18 +49,38 @@ final class MultisiteDrushCommands extends DrushCommands {
     $default_site_dir = $this->getDir() . '/docroot/sites/default';
 
     $this->localMachineHelper()->execute([
-      'rsync -r',
-      $default_site_dir,
+      'rsync',
+      '-r',
+      $default_site_dir . '/',
       $new_site_dir,
-      '--exclude local.settings.php',
-      '--exclude files',
+      '--exclude',
+      'local.settings.php',
+      '--exclude',
+      'files',
     ], NULL, $this->getDir());
     $this->say("New site generated at <comment>$new_site_dir</comment>");
 
+    // Update sws.yml for the new site to set the correct remote-alias.
+    $sws_yml_path = $new_site_dir . '/sws.yml';
+    if (file_exists($sws_yml_path)) {
+      $sws = Yaml::parseFile($sws_yml_path);
+      if (!isset($sws['site'])) {
+        $sws['site'] = [];
+      }
+      $sws['site']['remote-alias'] = "$site_name.prod";
+      file_put_contents($sws_yml_path, Yaml::dump($sws, 2, 2));
+      $this->say("Updated remote-alias in $sws_yml_path to @$site_name.prod");
+    }
+
     if (file_exists($this->getDir() . '/drush/sites/default.site.yml')) {
       $new_alias = Yaml::parseFile($this->getDir() . '/drush/sites/default.site.yml');
-      foreach ($new_alias as &$alias) {
-        $alias['uri'] = $site_name;
+      // Set the URI for each alias based on the environment.
+      foreach ($new_alias as $env => &$alias) {
+        if ($env === 'local') {
+          $alias['uri'] = $site_name;
+        } else {
+          $alias['uri'] = "{$site_name}-{$env}.stanford.edu";
+        }
       }
       file_put_contents($this->getDir() . "/drush/sites/$site_name.site.yml", Yaml::dump($new_alias, 99, 2));
       $this->say("Drush aliases generated: @$site_name");
@@ -71,7 +91,7 @@ final class MultisiteDrushCommands extends DrushCommands {
 
       $options['multisites'][] = $site_name;
       asort($options['multisites']);
-      $drush_config['command']['sws']['options']['multisites'] = $options['multisites'];
+      $drush_config['command']['sws']['options']['multisites'] = array_values($options['multisites']);
 
       file_put_contents($this->getDir() . '/drush/drush.yml', Yaml::dump($drush_config, 99, 2));
     }
@@ -106,7 +126,7 @@ final class MultisiteDrushCommands extends DrushCommands {
       $siteProfile = $config->get('site.profile');
     }
 
-    $this->localMachineHelper()->execute([
+    $result = $this->localMachineHelper()->execute([
       'drush',
       'site-install',
       $siteProfile ?: $defaultProfile,
@@ -114,6 +134,10 @@ final class MultisiteDrushCommands extends DrushCommands {
       '-v',
       '-y',
     ], NULL, $this->getDir());
+    // Throw an exception if the command failed, which will stop execution.
+    if (!$result->isSuccessful()) {
+      throw new CommandFailedException('Failed to install site: ' . $result->getErrorOutput(), $result->getExitCode());
+    }
   }
 
   /**
@@ -236,11 +260,108 @@ final class MultisiteDrushCommands extends DrushCommands {
     $success_report = array_filter(explode("\n", file_get_contents(sys_get_temp_dir() . '/success-report.txt')));
     $failed_report = array_filter(explode("\n", file_get_contents(sys_get_temp_dir() . '/failed-report.txt')));
 
+    $env = getenv('AH_SITE_ENVIRONMENT') ?: 'unknown';
     $this->yell(sprintf('Updated %s sites successfully.', count($success_report)), 100);
+    $this->sendWebhookNotification(sprintf('Deployment to %s: %d sites updated successfully.', $env, count($success_report)));
 
     if ($failed_report) {
       $this->yell(sprintf("Update failed for the following sites:\n%s", implode("\n", $failed_report)), 100, 'red');
+      $this->sendWebhookNotification(sprintf('Deployment to %s failed for: %s', $env, implode(', ', $failed_report)));
       throw new CommandFailedException('Failed update');
+    }
+  }
+
+  /**
+   * Sync all multisite databases from production to a target environment 
+   * (default: staging).
+   *
+   * Copies databases from prod to the specified environment, with options to 
+   * exclude sites, force copy, and suppress notifications.
+   * 
+   * Replaces `blt stage`.
+   *
+   * @option exclude Comma separated list of database names to skip.
+   * @option force Force copying of databases even if they were already copied recently.
+   * @option env Target environment (default: test).
+   * @option no-notify Suppress Slack notification.
+   */
+  #[CLI\Command(name: 'sws:multisite:sync-stage')]
+  #[CLI\Option(name: 'exclude', description: 'Comma separated list of site names to skip.')]
+  #[CLI\Option(name: 'force', description: 'Force copying of databases even if they were already copied recently.')]
+  #[CLI\Option(name: 'env', description: 'Target environment (default: test).')]
+  #[CLI\Option(name: 'no-notify', description: 'Suppress Slack notification.')]
+  #[CLI\Option(name: 'app-id', description: 'Acquia application ID')]
+  #[CLI\Option(name: 'app-key', description: 'Acquia API key')]
+  #[CLI\Option(name: 'app-secret', description: 'Acquia API secret')]
+  public function syncSitesStaging(
+    $options = [
+      'exclude' => NULL,
+      'force' => FALSE,
+      'env' => 'test',
+      'no-notify' => FALSE,
+      'app-id' => InputOption::VALUE_REQUIRED,
+      'app-key' => InputOption::VALUE_REQUIRED,
+      'app-secret' => InputOption::VALUE_REQUIRED,
+  ]
+  ) {
+    $acquiaApi = $this->getAcquiaApi();
+    $appId = $this->input()->getOption('app-id');
+
+    // Parse options.
+    $from_env = 'prod';
+    $to_env = $options['env'] ?? 'test';
+    $exclude = $options['exclude'] ? array_map('trim', explode(',', $options['exclude'])) : [];
+    $force = !empty($options['force']);
+    $no_notify = !empty($options['no-notify']);
+
+    // Get environment UUIDs.
+    $environments = $acquiaApi->acquiaEnvironments->getAll($appId);
+    $env_uuids = [];
+    foreach ($environments as $env) {
+      $env_uuids[$env->name] = $env->uuid;
+    }
+    $from_uuid = $env_uuids[$from_env] ?? null;
+    $to_uuid = $env_uuids[$to_env] ?? null;
+    if (!$from_uuid || !$to_uuid) {
+      $this->yell("Could not find UUIDs for prod or target environment.", 40, 'red');
+      return;
+    }
+
+    // Get all databases/sites.
+    $databases = $acquiaApi->acquiaDatabases->getNames($appId);
+    $sites = [];
+    foreach ($databases as $db) {
+      if (!in_array($db->name, $exclude)) {
+        $sites[] = $db->name;
+      }
+    }
+    if (empty($sites)) {
+      $this->say('No sites to sync.');
+      return;
+    }
+
+    if (!$force && !$this->confirm(
+      sprintf(
+        'This will sync the databases for the following sites from prod to the %s environment:<comment> %s. </comment>Continue?',
+        $to_env,
+        implode(', ', $sites)
+      ),
+      TRUE
+    )) {
+      return;
+    }
+
+    foreach ($sites as $database_name) {
+      $this->output()->writeln("<info>Copying database $database_name from $from_env to $to_env</info>");
+      $acquiaApi->acquiaDatabases->copy($from_uuid, $database_name, $to_uuid);
+      $this->output()->writeln("<comment>Waiting 1 minute before next copy...</comment>");
+      sleep(60); // 1 minute
+    }
+
+    $this->yell(count($sites) . " databases have been copied to $to_env.");
+
+    if (!$no_notify) {
+      $this->sendWebhookNotification(sprintf('%d databases synced from prod to %s.', count($sites), $to_env));
     }
   }
 
@@ -273,6 +394,53 @@ final class MultisiteDrushCommands extends DrushCommands {
       return FALSE;
     }
     return TRUE;
+  }
+
+  /**
+   * Run the Drupal cron on all multisites.
+   */
+  #[CLI\Command(name: 'sws:multisite:cron')]
+  public function cron() {
+    $this->runCronForAllSites('cron', 'Drupal cron');
+  }
+
+  /**
+   * Run the Drupal Scheduler cron on all multisites to publish/unpublish nodes.
+   */
+  #[CLI\Command(name: 'sws:multisite:cron:scheduler')]
+  public function cronScheduler() {
+    $this->runCronForAllSites('cron:run scheduler_cron', 'Scheduler cron');
+  }
+
+  /**
+   * Helper to run a Drush cron command on all multisites.
+   */
+  protected function runCronForAllSites($drushCommand, $label) {
+    // Adjust this to your multisite list source.
+    $multisites = $this->getConfig()->get('command.sws.options.multisites') ?? ['default'];
+    $failed = [];
+    foreach ($multisites as $site) {
+      $this->output()->writeln("Running $label on <comment>$site</comment>...");
+      $result = $this->localMachineHelper()->execute([
+        'drush',
+        '@self',
+        $drushCommand,
+        "--uri=$site",
+      ], NULL, $this->getDir());
+      if (!$result->isSuccessful()) {
+        $failed[] = $site;
+        $this->output()->writeln("$label on <comment>$site</comment> failed.");
+      } else {
+        $this->output()->writeln("$label on <comment>$site</comment> completed successfully.");
+      }
+    }
+    if ($failed) {
+      $this->output()->writeln("$label failed on the following sites: " . implode(', ', $failed));
+      $this->sendWebhookNotification(sprintf('%s failed on: %s', $label, implode(', ', $failed)));
+    }
+    else {
+      $this->output()->writeln("$label completed successfully on all sites.");
+    }
   }
 
 }
