@@ -496,7 +496,12 @@ final class ArtifactDeploymentDrushCommands extends DrushCommands {
     $message = $this->localMachineHelper()
       ->executeFromCmd('git log -1 --pretty=%B', NULL, $this->getDir())
       ->getOutput();
-    return str_replace("\n", '', $message);
+    $message = str_replace("\n", '', $message);
+    // Provide a default commit message if still empty.
+    if (empty(trim($message))) {
+      $message = 'Automated artifact deployment via Drush';
+    }
+    return $message;
   }
 
   /**
