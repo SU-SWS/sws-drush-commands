@@ -86,8 +86,11 @@ final class ArtifactDeploymentDrushCommands extends DrushCommands {
     $commitHash = $this->getLocalGitCommitHash();
 
     if ($isDirty) {
+      $changes = $this->localMachineHelper()
+        ->executeFromCmd('git diff HEAD', NULL, $this->getDir(), FALSE)
+        ->getOutput();
       throw new \RuntimeException(
-        'Pushing code was aborted because your local Git repository has uncommitted changes. Either commit, reset, or stash your changes via git.'
+        sprintf('Pushing code was aborted because your local Git repository has uncommitted changes. Either commit, reset, or stash your changes via git. Files: %s', $changes)
       );
     }
     $this->checklist = new Checklist($this->output());
@@ -142,7 +145,7 @@ final class ArtifactDeploymentDrushCommands extends DrushCommands {
     $this->checklist->completePreviousItem();
 
     if (!$options['no-push']) {
-      $dest = $refType == 'branch'? $this->destinationGitRef: $this->destinationTag;
+      $dest = $refType == 'branch' ? $this->destinationGitRef : $this->destinationTag;
       $this->checklist->addItem("Pushing changes to <options=bold>$dest</> $refType.");
       $this->pushArtifact($outputCallback, $artifactDir, $destinationGitUrls, $this->destinationGitRef . ':' . $this->destinationGitRef, $refType);
       $this->checklist->completePreviousItem();
@@ -530,7 +533,13 @@ final class ArtifactDeploymentDrushCommands extends DrushCommands {
    */
   private function pushArtifact(\Closure $outputCallback, string $artifactDir, array $vcsUrls, string $destGit, string $destType = 'branch'): void {
     $this->localmachineHelper()->checkRequiredBinariesExist(['git']);
-    $this->localmachineHelper()->execute(['git', 'config', '--global', 'http.postBuffer', 268435456]);
+    $this->localmachineHelper()->execute([
+      'git',
+      'config',
+      '--global',
+      'http.postBuffer',
+      268435456,
+    ]);
 
     foreach ($vcsUrls as $vcsUrl) {
       $outputCallback('out', "Pushing changes to Git ($vcsUrl)");
