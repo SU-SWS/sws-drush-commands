@@ -127,8 +127,13 @@ final class AcsfDrushCommands extends DrushCommands {
       if ($importDelay) {
         $checklist = new Checklist($this->output());
         $outputCallback = $this->getOutputCallback($this->output(), $checklist);
+        $dateTime = new \DateTime('now', new \DateTimeZone('America/Los_Angeles'));
+        $dateTime->add(new \DateInterval("PT{$importDelay}S"));
 
-        $checklist->addItem(sprintf('Delayed config import until %s.', date('H:i:s', time() + $importDelay)));
+        $message = sprintf('Delayed config import until %s.', $dateTime->format('h:i'));
+        $checklist->addItem($message);
+
+        $this->sendSlackMessage($message);
         $this->waitTilItsTime($outputCallback, time() + $importDelay);
         $checklist->completePreviousItem();
       }
