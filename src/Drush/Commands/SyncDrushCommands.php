@@ -121,13 +121,6 @@ final class SyncDrushCommands extends DrushCommands {
   protected function updateDatabase(\Closure $outputCallback, string $site_name, bool $partial = FALSE) {
     $outputCallback('out', "Database updates");
     if (!$partial) {
-      $this->localMachineHelper()->execute([
-        'drush',
-        "@$site_name.local",
-        'en',
-        'field_validation_legacy',
-      ], $outputCallback, $this->getDir(), FALSE);
-
       $result = $this->localMachineHelper()->execute([
         'drush',
         "@$site_name.local",
