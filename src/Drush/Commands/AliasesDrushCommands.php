@@ -27,6 +27,7 @@ use Symfony\Component\Yaml\Yaml;
  * existing aliases are left untouched.
  *
  * Example drush.yml config:
+ *
  * @code
  * sws:
  *   acsf:
@@ -52,7 +53,12 @@ final class AliasesDrushCommands extends DrushCommands {
   /**
    * Never prompt for a password and give up quickly on a dead host.
    */
-  private const SSH_OPTIONS = ['-o', 'BatchMode=yes', '-o', 'ConnectTimeout=15'];
+  private const SSH_OPTIONS = [
+    '-o',
+    'BatchMode=yes',
+    '-o',
+    'ConnectTimeout=15',
+  ];
 
   /**
    * Absolute path to the alias directory.
@@ -154,7 +160,8 @@ final class AliasesDrushCommands extends DrushCommands {
    */
   private function resolveHosts(string $stack, array $envs, array $existing): array {
     // Each environment can be configured with a single host or a list.
-    $hosts = array_map(fn($envHosts) => array_values(array_filter((array) $envHosts)), array_intersect_key($this->getConfig()->get('sws.acsf.hosts') ?: [], array_flip($envs)));
+    $hosts = array_map(fn($envHosts) => array_values(array_filter((array) $envHosts)), array_intersect_key($this->getConfig()
+      ->get('sws.acsf.hosts') ?: [], array_flip($envs)));
     $hosts = array_filter($hosts);
 
     // Otherwise use the hosts the existing aliases already point to.
@@ -172,7 +179,8 @@ final class AliasesDrushCommands extends DrushCommands {
     }
 
     foreach (array_diff($envs, array_keys($hosts)) as $env) {
-      $this->logger()->error("No host is known for $env. Add it to sws.acsf.hosts.$env in drush.yml.");
+      $this->logger()
+        ->error("No host is known for $env. Add it to sws.acsf.hosts.$env in drush.yml.");
     }
     return $hosts;
   }
@@ -202,7 +210,12 @@ final class AliasesDrushCommands extends DrushCommands {
       $processes = [];
       foreach ($remaining as $env => $envHosts) {
         $user = "$stack.01$env";
-        $processes[$env] = new Process(['ssh', ...self::SSH_OPTIONS, "$user@{$envHosts[$attempt]}", "cat /mnt/files/$user/files-private/sites.json"]);
+        $processes[$env] = new Process([
+          'ssh',
+          ...self::SSH_OPTIONS,
+          "$user@{$envHosts[$attempt]}",
+          "cat /mnt/files/$user/files-private/sites.json",
+        ]);
         $processes[$env]->setTimeout(120);
         $processes[$env]->start();
       }
@@ -214,10 +227,12 @@ final class AliasesDrushCommands extends DrushCommands {
             throw new \RuntimeException(trim($process->getErrorOutput()) ?: 'exit ' . $process->getExitCode());
           }
           $fetched[$env] = $this->parseSitesJson($process->getOutput(), $stack, $env);
-          $this->io()->writeln(sprintf('Found %d sites on %s.', count($fetched[$env]), $env));
+          $this->io()
+            ->writeln(sprintf('Found %d sites on %s.', count($fetched[$env]), $env));
         }
         catch (\Throwable $e) {
-          $this->logger()->warning(sprintf('Unable to read sites.json for %s from %s: %s', $env, $hosts[$env][$attempt], $e->getMessage()));
+          $this->logger()
+            ->warning(sprintf('Unable to read sites.json for %s from %s: %s', $env, $hosts[$env][$attempt], $e->getMessage()));
           // SSH exits with 255 when it can't connect, so don't send any sites
           // to that host.
           if ($process->getExitCode() === 255 && count($hosts[$env]) > 1) {
@@ -228,7 +243,8 @@ final class AliasesDrushCommands extends DrushCommands {
     }
     foreach ($unreachable as $env => $envHosts) {
       $hosts[$env] = array_values(array_diff($hosts[$env], $envHosts));
-      $this->logger()->warning(sprintf('No %s aliases will use %s.', $env, implode(', ', $envHosts)));
+      $this->logger()
+        ->warning(sprintf('No %s aliases will use %s.', $env, implode(', ', $envHosts)));
     }
     return $fetched;
   }
@@ -333,9 +349,17 @@ final class AliasesDrushCommands extends DrushCommands {
    *   Command options.
    */
   private function writeAliases(string $stack, array $generated, array $existing, array $envs, array $options): void {
-    $counts = ['created' => [], 'updated' => [], 'removed' => [], 'unchanged' => []];
+    $counts = [
+      'created' => [],
+      'updated' => [],
+      'removed' => [],
+      'unchanged' => [],
+    ];
 
-    foreach (array_unique([...array_keys($existing), ...array_keys($generated)]) as $site) {
+    foreach (array_unique([
+      ...array_keys($existing),
+      ...array_keys($generated),
+    ]) as $site) {
       $aliases = $existing[$site] ?? [];
       foreach ($envs as $env) {
         // Replace aliases from before the rename to @site.live.
@@ -373,7 +397,8 @@ final class AliasesDrushCommands extends DrushCommands {
       }
     }
 
-    $this->io()->definitionList(...array_map(fn($label, $sites) => [ucfirst($label) => count($sites)], array_keys($counts), $counts));
+    $this->io()
+      ->definitionList(...array_map(fn($label, $sites) => [ucfirst($label) => count($sites)], array_keys($counts), $counts));
     if ($counts['created']) {
       $this->io()->writeln('Created: ' . implode(', ', $counts['created']));
     }
@@ -384,7 +409,8 @@ final class AliasesDrushCommands extends DrushCommands {
       $this->io()->note('Dry run: no files were changed.');
     }
     elseif ($envs) {
-      $this->io()->success(sprintf('Aliases for %s written to %s.', implode(', ', $envs), $this->aliasDir));
+      $this->io()
+        ->success(sprintf('Aliases for %s written to %s.', implode(', ', $envs), $this->aliasDir));
     }
   }
 
@@ -401,7 +427,8 @@ final class AliasesDrushCommands extends DrushCommands {
         $aliases[basename($file, '.site.yml')] = Yaml::parseFile($file) ?: [];
       }
       catch (\Throwable $e) {
-        $this->logger()->warning("Ignoring unreadable alias file $file: " . $e->getMessage());
+        $this->logger()
+          ->warning("Ignoring unreadable alias file $file: " . $e->getMessage());
       }
     }
     return $aliases;

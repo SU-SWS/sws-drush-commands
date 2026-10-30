@@ -136,7 +136,8 @@ final class AcsfDrushCommands extends DrushCommands {
     $options['concurrency'] ??= $env === 'live' ? 10 : 3;
     $hosts = array_unique(array_map(fn(SiteAliasInterface $alias) => (string) $alias->get('host'), $sites));
 
-    $this->io()->title(($options['resume'] ? 'Resuming' : 'Updating') . " $stack.01$env");
+    $this->io()
+      ->title(($options['resume'] ? 'Resuming' : 'Updating') . " $stack.01$env");
     $this->io()->definitionList(
       ['Sites' => count($sites)],
       ['Webhosts' => count($hosts)],
@@ -147,7 +148,10 @@ final class AcsfDrushCommands extends DrushCommands {
     $this->registerSignalHandlers();
     $this->sendSlackMessage(($options['resume'] ? 'Resuming' : 'Beginning') . " updates on `$stack.01$env`.");
 
-    $commands = $this->state['separate'] ? ['updatedb', 'config:import'] : ['deploy'];
+    $commands = $this->state['separate'] ? [
+      'updatedb',
+      'config:import',
+    ] : ['deploy'];
     foreach ($commands as $command) {
       // Config is only imported on sites whose database updates succeeded.
       $phaseSites = $command === 'config:import' ? array_intersect_key($sites, array_flip($this->state['phases']['updatedb']['completed'])) : $sites;
@@ -278,7 +282,8 @@ final class AcsfDrushCommands extends DrushCommands {
         $sites[$name] = $this->prepareAlias($alias);
         continue;
       }
-      $this->logger()->warning("The $name alias no longer exists and will be skipped.");
+      $this->logger()
+        ->warning("The $name alias no longer exists and will be skipped.");
     }
     if (!$sites) {
       throw new CommandFailedException('None of the sites in the saved run have aliases any more.');
@@ -358,7 +363,8 @@ final class AcsfDrushCommands extends DrushCommands {
     // check it.
     $outage = NULL;
 
-    $this->io()->section(sprintf('Running `drush %s` on %d sites', $command, count($queue)) . ($completed ? " ($completed already done)" : ''));
+    $this->io()
+      ->section(sprintf('Running `drush %s` on %d sites', $command, count($queue)) . ($completed ? " ($completed already done)" : ''));
     $progress = $this->createProgressBar($total, $command, $completed);
 
     while ($queue || $running) {
@@ -393,9 +399,17 @@ final class AcsfDrushCommands extends DrushCommands {
           // without using up one of its attempts, and pause new work until
           // the network is back.
           $job['connectionFailures']++;
-          array_unshift($queue, array_intersect_key($job, array_flip(['alias', 'host', 'attempt', 'connectionFailures'])));
+          array_unshift($queue, array_intersect_key($job, array_flip([
+            'alias',
+            'host',
+            'attempt',
+            'connectionFailures',
+          ])));
           if (!$outage) {
-            $outage = ['alias' => $sites[$job['alias']], 'nextCheck' => microtime(TRUE) + 5];
+            $outage = [
+              'alias' => $sites[$job['alias']],
+              'nextCheck' => microtime(TRUE) + 5,
+            ];
             $this->writeAboveProgress($progress, sprintf('<comment>⚠</comment> Lost connection to %s. Pausing until it is reachable again.', $job['host']));
             $this->sendSlackMessage(sprintf('Lost connection to `%s`. Updates paused until it is reachable again.', $job['host']));
           }
@@ -406,13 +420,19 @@ final class AcsfDrushCommands extends DrushCommands {
           $completed++;
           $this->state['phases'][$command]['completed'][] = $job['alias'];
           $this->saveState();
-          $this->writeAboveProgress($progress, sprintf('<info>✔</info> [%d/%d] %s', $completed, $total, $job['alias']), $this->output()->isDecorated());
+          $this->writeAboveProgress($progress, sprintf('<info>✔</info> [%d/%d] %s', $completed, $total, $job['alias']), $this->output()
+            ->isDecorated());
         }
         elseif ($job['attempt'] < $maxAttempts && !$this->stopRequested) {
           // Send it to the back of the queue so a struggling site doesn't
           // hold up the rest of the work.
           $job['attempt']++;
-          $queue[] = array_intersect_key($job, array_flip(['alias', 'host', 'attempt', 'connectionFailures']));
+          $queue[] = array_intersect_key($job, array_flip([
+            'alias',
+            'host',
+            'attempt',
+            'connectionFailures',
+          ]));
           $this->writeAboveProgress($progress, sprintf('<comment>↻</comment> %s failed (%s), will retry. Attempt %d of %d. Log: %s', $job['alias'], $this->exitCodeLabel($process, $job), $job['attempt'], $maxAttempts, $this->logFile($job['alias'])));
           continue;
         }
@@ -534,7 +554,8 @@ final class AcsfDrushCommands extends DrushCommands {
    *   The running process.
    */
   private function startSiteProcess(SiteAliasInterface $alias, string $command, ?float $timeout): Process {
-    $process = $this->processManager()->drush($alias, $command, [], ['yes' => TRUE]);
+    $process = $this->processManager()
+      ->drush($alias, $command, [], ['yes' => TRUE]);
 
     // Run each site in its own session so that Ctrl+C in the terminal only
     // reaches this command, which can then let running sites finish cleanly
@@ -704,10 +725,12 @@ final class AcsfDrushCommands extends DrushCommands {
 
     $this->io()->warning($message);
     if ($failed) {
-      $this->io()->listing(array_map(fn($alias) => "$alias (log: {$this->logFile($alias)})", $failed));
+      $this->io()
+        ->listing(array_map(fn($alias) => "$alias (log: {$this->logFile($alias)})", $failed));
     }
     if (!Drush::simulate()) {
-      $this->io()->writeln(sprintf('Resume with: <comment>drush sws:acsf:update-environment --resume=%s</comment>', $this->logDir));
+      $this->io()
+        ->writeln(sprintf('Resume with: <comment>drush sws:acsf:update-environment --resume=%s</comment>', $this->logDir));
     }
 
     throw new CommandFailedException(sprintf('%d sites failed and %d have not been updated yet.', count($failed), count($skipped)));
@@ -719,7 +742,8 @@ final class AcsfDrushCommands extends DrushCommands {
   private function createProgressBar(int $total, string $command, int $startAt = 0): ProgressBar {
     // A redrawn progress bar is only useful in a terminal. When the output is
     // being logged, the per-site lines are written instead.
-    $output = $this->output()->isDecorated() ? $this->output() : new NullOutput();
+    $output = $this->output()
+      ->isDecorated() ? $this->output() : new NullOutput();
     $progress = new ProgressBar($output, $total);
     $progress->setFormat(' %command% %current%/%max% [%bar%] %percent:3s%% %elapsed:6s%/%estimated:-6s% | running: %running% | failed: %failed%');
     $progress->setMessage($command, 'command');
@@ -804,14 +828,15 @@ final class AcsfDrushCommands extends DrushCommands {
       return;
     }
     pcntl_async_signals(TRUE);
-    $handler = function () {
+    $handler = function() {
       if ($this->stopRequested) {
         $this->abortRequested = TRUE;
         $this->output()->writeln("\n<error>Terminating running sites.</error>");
         return;
       }
       $this->stopRequested = TRUE;
-      $this->output()->writeln("\n<comment>Stopping after running sites complete. Press Ctrl+C again to terminate them.</comment>");
+      $this->output()
+        ->writeln("\n<comment>Stopping after running sites complete. Press Ctrl+C again to terminate them.</comment>");
     };
     pcntl_signal(SIGINT, $handler);
     pcntl_signal(SIGTERM, $handler);
@@ -890,7 +915,8 @@ final class AcsfDrushCommands extends DrushCommands {
     }
     catch (\Throwable $e) {
       $this->slackFailed = TRUE;
-      $this->logger()->warning('Failed to send slack notification. ' . $e->getMessage());
+      $this->logger()
+        ->warning('Failed to send slack notification. ' . $e->getMessage());
     }
     return NULL;
   }
