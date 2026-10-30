@@ -5,36 +5,28 @@ declare(strict_types=1);
 namespace Drupal\SwsDrush\Helpers;
 
 use Acquia\DrupalEnvironmentDetector\AcquiaDrupalEnvironmentDetector;
-use loophp\phposinfo\Enum\FamilyName;
-use loophp\phposinfo\OsInfo;
 
 /**
- * Attempts to detect various properties about the current hosting environment.
+ * Detects properties of the current hosting environment.
  *
- * @package Acquia\Blt\Robo\Common
+ * Adds CI and Pantheon detection to Acquia's detector. This is used by the
+ * settings files on every request, so it avoids any expensive work.
  */
 final class EnvironmentDetector extends AcquiaDrupalEnvironmentDetector {
 
   /**
-   * Get CI env name.
+   * Get the CI environment name.
    *
-   * In the case of multiple environment detectors declaring a CI env name, the
-   * first one wins.
+   * @return string|false
+   *   "pipelines", "codestudio", or FALSE when not on one of those.
    */
-  public static function getCiEnv(): bool {
-    $results = self::getSubclassResults(__FUNCTION__);
-    if ($results) {
-      return current($results);
-    }
-
+  public static function getCiEnv(): string|false {
     if (isset($_ENV['PIPELINE_ENV'])) {
       return 'pipelines';
     }
-
     if (isset($_ENV['GITLAB_CI_TOKEN'])) {
       return 'codestudio';
     }
-
     return FALSE;
   }
 
@@ -46,21 +38,12 @@ final class EnvironmentDetector extends AcquiaDrupalEnvironmentDetector {
   }
 
   /**
-   * Get the settings file include for the current CI environment.
-   *
-   * This may be provided by BLT, or via a Composer package that has provided
-   * its own environment detector. In the case of multiple detectors providing a
-   * settings file, the first one wins.
+   * Get the settings file for the current CI environment.
    *
    * @return string
    *   Settings file full path and filename.
    */
   public static function getCiSettingsFile(): string {
-    $results = array_filter(self::getSubclassResults(__FUNCTION__));
-    if ($results) {
-      return current($results);
-    }
-
     return sprintf("%s/vendor/acquia/blt/settings/%s.settings.php", dirname(DRUPAL_ROOT), self::getCiEnv());
   }
 
@@ -72,42 +55,40 @@ final class EnvironmentDetector extends AcquiaDrupalEnvironmentDetector {
   }
 
   /**
-   * Get Pantheon.
+   * Get the Pantheon environment name.
+   *
+   * @return string|false
+   *   The environment name, or FALSE when not on Pantheon.
    */
-  public static function getPantheonEnv(): bool {
+  public static function getPantheonEnv(): string|false {
     return getenv('PANTHEON_ENVIRONMENT');
   }
 
   /**
-   * Is Pantheon.
+   * Is the Pantheon dev environment.
    */
   public static function isPantheonDevEnv(): bool {
-    return self::getPantheonEnv() == 'dev';
+    return self::getPantheonEnv() === 'dev';
   }
 
   /**
-   * Is Pantheon.
+   * Is the Pantheon test environment.
    */
   public static function isPantheonStageEnv(): bool {
-    return self::getPantheonEnv() == 'test';
+    return self::getPantheonEnv() === 'test';
   }
 
   /**
-   * Is Pantheon.
+   * Is the Pantheon live environment.
    */
   public static function isPantheonProdEnv(): bool {
-    return self::getPantheonEnv() == 'live';
+    return self::getPantheonEnv() === 'live';
   }
 
   /**
    * Is local.
    */
   public static function isLocalEnv(): bool {
-    $results = self::getSubclassResults(__FUNCTION__);
-    if ($results) {
-      return TRUE;
-    }
-
     return parent::isLocalEnv() && !self::isPantheonEnv() && !self::isCiEnv();
   }
 
@@ -115,11 +96,6 @@ final class EnvironmentDetector extends AcquiaDrupalEnvironmentDetector {
    * Is dev.
    */
   public static function isDevEnv(): bool {
-    $results = self::getSubclassResults(__FUNCTION__);
-    if ($results) {
-      return TRUE;
-    }
-
     return self::isAhDevEnv() || self::isPantheonDevEnv();
   }
 
@@ -127,11 +103,6 @@ final class EnvironmentDetector extends AcquiaDrupalEnvironmentDetector {
    * Is stage.
    */
   public static function isStageEnv(): bool {
-    $results = self::getSubclassResults(__FUNCTION__);
-    if ($results) {
-      return TRUE;
-    }
-
     return self::isAhStageEnv() || self::isPantheonStageEnv();
   }
 
@@ -139,11 +110,6 @@ final class EnvironmentDetector extends AcquiaDrupalEnvironmentDetector {
    * Is prod.
    */
   public static function isProdEnv(): bool {
-    $results = self::getSubclassResults(__FUNCTION__);
-    if ($results) {
-      return TRUE;
-    }
-
     return self::isAhProdEnv() || self::isPantheonProdEnv();
   }
 
@@ -155,17 +121,14 @@ final class EnvironmentDetector extends AcquiaDrupalEnvironmentDetector {
   }
 
   /**
-   * Get a standardized name of the current OS.
-   *
-   * @return string
-   *   Name of the OS family.
+   * Get the OS family: Linux, Darwin, Windows, BSD, Solaris or Unknown.
    */
   public static function getPlatform(): string {
-    return OsInfo::family();
+    return PHP_OS_FAMILY;
   }
 
   /**
-   * Get a unique ID for the current running environment.
+   * Get a unique ID for the current machine.
    *
    * Should conform to UUIDs generated by sebhildebrandt/systeminformation.
    *
@@ -174,18 +137,17 @@ final class EnvironmentDetector extends AcquiaDrupalEnvironmentDetector {
    * @return string|null
    *   The machine UUID.
    */
-  public static function getMachineUuid(): null|string {
+  public static function getMachineUuid(): ?string {
     switch (self::getPlatform()) {
-      case FamilyName::LINUX:
-        return shell_exec('( cat /var/lib/dbus/machine-id /etc/machine-id 2> /dev/null || hostname ) | head -n 1 || :');
+      case 'Linux':
+        return shell_exec('( cat /var/lib/dbus/machine-id /etc/machine-id 2> /dev/null || hostname ) | head -n 1 || :') ?: NULL;
 
-      case FamilyName::DARWIN:
-        $output = shell_exec('ioreg -rd1 -c IOPlatformExpertDevice | grep IOPlatformUUID');
-        $parts = explode('=', str_replace('"', '', $output));
-        return strtolower(trim($parts[1]));
+      case 'Darwin':
+        $parts = explode('=', str_replace('"', '', (string) shell_exec('ioreg -rd1 -c IOPlatformExpertDevice | grep IOPlatformUUID')));
+        return isset($parts[1]) ? strtolower(trim($parts[1])) : NULL;
 
-      case FamilyName::WINDOWS:
-        return shell_exec('%windir%\\System32\\reg query "HKEY_LOCAL_MACHINE\\SOFTWARE\\Microsoft\\Cryptography" /v MachineGuid');
+      case 'Windows':
+        return shell_exec('%windir%\\System32\\reg query "HKEY_LOCAL_MACHINE\\SOFTWARE\\Microsoft\\Cryptography" /v MachineGuid') ?: NULL;
 
       default:
         return NULL;
@@ -193,48 +155,29 @@ final class EnvironmentDetector extends AcquiaDrupalEnvironmentDetector {
   }
 
   /**
-   * OS name.
-   *
-   * @return string
-   *   The OS name.
+   * Get the OS name.
    */
   public static function getOsName(): string {
-    return OsInfo::os();
+    return PHP_OS;
   }
 
   /**
-   * OS version.
-   *
-   * @return string
-   *   The OS version.
+   * Get the OS version.
    */
   public static function getOsVersion(): string {
-    return OsInfo::version();
+    return php_uname('v');
   }
 
   /**
-   * Find the repo root.
-   *
-   * This isn't as trivial as it sounds, since a simple relative path
-   * (__DIR__ . '/../../../../../../') won't work if this package is symlinked
-   * using a Composer path repository, and this file can be invoked from both
-   * web requests and BLT CLI calls.
-   *
-   * @return string
-   *   The repo root as an absolute path.
+   * Get the repo root as an absolute path.
    */
   public static function getRepoRoot(): string {
     if (defined('DRUPAL_ROOT')) {
-      // This is a web or Drush request.
       return dirname(DRUPAL_ROOT);
     }
-    else {
-      // This is a BLT CLI call. Get the $repo_root that was set in
-      // bin/blt-robo.php.
-      // phpcs:ignore
-      global $repo_root;
-      return $repo_root;
-    }
+    // phpcs:ignore
+    global $repo_root;
+    return (string) $repo_root;
   }
 
   /**
@@ -250,47 +193,6 @@ final class EnvironmentDetector extends AcquiaDrupalEnvironmentDetector {
       'ode' => self::isAhOdeEnv(),
       'ah_other' => self::isAhEnv() && !self::isDevEnv() && !self::isStageEnv() && !self::isAhOdeEnv() && !self::isProdEnv(),
     ];
-  }
-
-  /**
-   * Call a given function in all EnvironmentDetector subclasses.
-   *
-   * Composer packages can provide their own version of an EnvironmentDetector
-   * that inherits from this one. This allows for detection of new types of
-   * environments not hardcoded in this class.
-   *
-   * @param string $functionName
-   *   The function name to call in a subclass.
-   *
-   * @return array
-   *   Results from each subclass function call (omits any null / false results)
-   *
-   * @throws \ReflectionException
-   */
-  private static function getSubclassResults($functionName): array {
-    static $detectors;
-    if (!isset($detectors)) {
-      $autoload_file = self::getRepoRoot() . '/vendor/autoload.php';
-      if (!file_exists($autoload_file)) {
-        $detectors = [];
-        return [];
-      }
-      // phpcs:ignore
-      $autoloader = require $autoload_file;
-      $classMap = $autoloader->getClassMap();
-      $detectors = array_filter($classMap, function($classPath) {
-        return strpos($classPath, 'Blt/Plugin/EnvironmentDetector') !== FALSE;
-      });
-    }
-    $results = [];
-    foreach ($detectors as $detector => $classPath) {
-      // Only call this method if it's been overridden by the child class.
-      $detectorReflector = new \ReflectionMethod($detector, $functionName);
-      if ($detectorReflector->getDeclaringClass()->getName() === $detector) {
-        $results[] = call_user_func([$detector, $functionName]);
-      }
-    }
-    return array_filter($results);
   }
 
 }

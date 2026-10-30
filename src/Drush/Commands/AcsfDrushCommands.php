@@ -854,39 +854,18 @@ final class AcsfDrushCommands extends DrushCommands {
   }
 
   /**
-   * Send a Slack message to the Slack API.
-   */
-  #[CLI\Command(name: 'sws:slack-message')]
-  #[CLI\Argument(name: 'message', description: 'Message text to send to slack.')]
-  #[CLI\Option(name: 'slack-token', description: 'Bot User OAuth Token. Must have "chat:write" scope permissions.')]
-  #[CLI\Option(name: 'slack-channel', description: 'An encoded ID or channel name that represents a channel, private group, or IM channel to send the message to.')]
-  #[CLI\Option(name: 'slack-thread', description: 'Provide another message\'s ts value to make this message a reply. Avoid using a reply\'s ts value; use its parent instead.')]
-  public function slackMessage(string $message, array $options = [
-    'slack-token' => NULL,
-    'slack-channel' => NULL,
-    'slack-thread' => NULL,
-  ]
-  ): ?string {
-    $this->slackThread = $options['slack-thread'] ?: NULL;
-    return $this->sendSlackMessage($message);
-  }
-
-  /**
    * Send a message to Slack, threaded under the first message.
    *
    * @param string $message
    *   Message text.
    * @param bool $broadcast
    *   Also show the thread reply in the channel.
-   *
-   * @return string|null
-   *   The posted message's timestamp, or null if it wasn't sent.
    */
-  private function sendSlackMessage(string $message, bool $broadcast = FALSE): ?string {
+  private function sendSlackMessage(string $message, bool $broadcast = FALSE): void {
     $token = $this->input()->getOption('slack-token');
     $channel = $this->input()->getOption('slack-channel');
     if ($this->slackFailed || !$token || !$channel) {
-      return NULL;
+      return;
     }
 
     try {
@@ -911,14 +890,12 @@ final class AcsfDrushCommands extends DrushCommands {
           $this->saveState();
         }
       }
-      return $data['ts'];
     }
     catch (\Throwable $e) {
       $this->slackFailed = TRUE;
       $this->logger()
         ->warning('Failed to send slack notification. ' . $e->getMessage());
     }
-    return NULL;
   }
 
 }

@@ -12,7 +12,6 @@
         "drush/drush": "<11.0"
     },
     "require": {
-        "loophp/phposinfo": "~1.0",
         "acquia/drupal-environment-detector": "^1.7",
         "typhonius/acquia-php-sdk-v2": "^3.4",
         "symfony/console": "^6 || ^7"

@@ -4,47 +4,74 @@ declare(strict_types=1);
 
 namespace Drupal\SwsDrush\Drush\Commands;
 
-use Drush\Boot\DrupalBootLevels;
-use Drush\Utils\StringUtils;
 use Drush\Attributes as CLI;
+use Drush\Boot\DrupalBootLevels;
 use Drush\Commands\DrushCommands;
+use Drush\Exceptions\CommandFailedException;
+use Symfony\Component\Console\Output\OutputInterface;
+use Symfony\Component\Filesystem\Filesystem;
+use Symfony\Component\Filesystem\Path;
 
 /**
- * A Drush command file.
+ * Commands for drush config, settings files and the hash salt.
  */
 #[CLI\Bootstrap(level: DrupalBootLevels::NONE)]
-final class SettingsDrushCommands extends DrushCommands
-{
+final class SettingsDrushCommands extends DrushCommands {
 
   use SwsCommandsTrait;
 
   /**
+   * The settings.php line that loads the shared SWS settings.
+   */
+  private const SWS_SETTINGS_REQUIRE = "require DRUPAL_ROOT . '/../drush/Commands/contrib/sws-drush-commands/settings/sws.settings.php';";
+
+  /**
+   * Files created by the current run, relative to the project root.
+   *
+   * @var string[]
+   */
+  private array $created = [];
+
+  /**
    * Get config value of drush.
+   *
+   * In text format, a list prints one value per line, which is handy in
+   * shell scripts. Missing config prints nothing, or "null" as JSON.
    */
   #[CLI\Command(name: 'sws:drush-config')]
+  #[CLI\Argument(name: 'config', description: 'Config key in dot notation, e.g. command.sws.options.multisites.')]
+  #[CLI\Option(name: 'format', description: 'Output format: text or json.')]
+  #[CLI\Usage(name: 'drush sws:drush-config command.sws.options.multisites', description: 'Print each multisite on its own line.')]
+  #[CLI\Usage(name: 'drush sws:drush-config project.frontend-repos --format=json', description: 'Print the value as JSON.')]
   public function getDrushConfig(string $config, array $options = [
     'format' => 'text',
   ]
-  )
-  {
+  ): void {
     $value = $this->getConfig()->get($config);
+
     if ($options['format'] === 'json') {
-      echo json_encode($value);
+      $this->writeRaw(json_encode($value));
       return;
     }
+    if ($options['format'] !== 'text') {
+      throw new CommandFailedException('Invalid format. Use text or json.');
+    }
 
-    if (is_array($value)) {
-      foreach ($value as $item) {
-        echo is_array($item) || is_object($item) ? gettype($item) : $item;
-        echo PHP_EOL;
+    foreach (is_array($value) ? $value : [$value] as $item) {
+      if ($item === NULL) {
+        continue;
       }
+      // Nested values are printed as JSON so they stay on one line.
+      $this->writeRaw(is_scalar($item) ? (is_bool($item) ? var_export($item, TRUE) : (string) $item) : json_encode($item));
     }
   }
 
   /**
    * Generates default settings files for Drupal and drush.
    *
-   * Replaces `blt settings`.
+   * Existing files are never overwritten, so it's safe to run again after
+   * adding a site. Delete a site's local.settings.php or local.drush.yml to
+   * regenerate it, e.g. with different database credentials.
    */
   #[CLI\Command(name: 'sws:multisite:settings', aliases: ['settings'])]
   #[CLI\Option(name: 'db-port', description: 'Database Port')]
@@ -62,87 +89,53 @@ final class SettingsDrushCommands extends DrushCommands
     'db-name' => 'drupal',
     'multisites' => ['default'],
   ]
-  )
-  {
-    $sites_dir = $this->getDir() . '/docroot/sites';
+  ): void {
+    $this->created = [];
+    $sitesDir = Path::join($this->getDir(), 'docroot', 'sites');
+    $templates = Path::join(dirname(__DIR__, 3), 'settings');
+    $database = [
+      '${drupal.db.port}' => (string) $options['db-port'],
+      '${drupal.db.host}' => (string) $options['db-host'],
+      '${drupal.db.username}' => (string) $options['db-user'],
+      '${drupal.db.password}' => (string) $options['db-pass'],
+      '${drupal.db.database}' => (string) $options['db-name'],
+    ];
 
-    // Generate hash file in salt.txt.
     $this->hashSalt();
 
-    $default_project_default_settings_file = "$sites_dir/default/default.settings.php";
-    $blt_local_settings_file = __DIR__ . '/../../../settings/default.local.settings.php';
-    $blt_includes_settings_file = __DIR__ . '/../../../settings/default.includes.settings.php';
-    $blt_glob_settings_file = __DIR__ . '/../../../settings/default.global.settings.php';
-    $blt_local_drush_file = __DIR__ . '/../../../settings/default.local.drush.yml';
+    // Settings shared by every site.
+    $this->copyFile("$templates/default.global.settings.php", "$sitesDir/settings/default.global.settings.php");
+    $this->copyFile("$sitesDir/settings/default.local.settings.php", "$sitesDir/settings/local.settings.php");
 
-    $xpand_config = [
-      '${drupal.db.port}' => $options['db-port'],
-      '${drupal.db.host}' => $options['db-host'],
-      '${drupal.db.username}' => $options['db-user'],
-      '${drupal.db.password}' => $options['db-pass'],
-      '${drupal.db.database}' => $options['db-name'],
-    ];
-    $file_system = $this->localmachineHelper()->getFilesystem();
-
-    $global_copy_map = [
-      "/$sites_dir/settings/default.local.settings.php" => "/$sites_dir/settings/local.settings.php"
-    ];
-
-    foreach ($options['multisites'] as $multisite) {
-      // Generate settings.php.
-      $multisite_dir = "/$sites_dir/$multisite";
-      $project_default_settings_file = "$multisite_dir/default.settings.php";
-      $project_settings_file = "$multisite_dir/settings.php";
-
-      // Generate local.settings.php.
-      $default_local_settings_file = "$multisite_dir/settings/default.local.settings.php";
-      $project_local_settings_file = "$multisite_dir/settings/local.settings.php";
-
-      // Generate default.includes.settings.php.
-      $default_includes_settings_file = "$multisite_dir/settings/default.includes.settings.php";
-
-      // Generate sites/settings/default.global.settings.php.
-      $default_glob_settings_file = $this->getDir() . "/docroot/sites/settings/default.global.settings.php";
-
-      // Generate local.drush.yml.
-      $default_local_drush_file = "$multisite_dir/default.local.drush.yml";
-      $project_local_drush_file = "$multisite_dir/local.drush.yml";
-
-      $copy_map = $global_copy_map + [
-        $blt_local_settings_file => $default_local_settings_file,
-        $default_local_settings_file => $project_local_settings_file,
-        $blt_includes_settings_file => $default_includes_settings_file,
-        $blt_local_drush_file => $default_local_drush_file,
-        $default_local_drush_file => $project_local_drush_file,
-        $blt_glob_settings_file => $default_glob_settings_file,
-        $default_project_default_settings_file => $project_default_settings_file,
-        $project_default_settings_file => $project_settings_file,
-      ];
-      // Define an array of files that require property expansion.
-      $expand_map = [
-        $default_local_settings_file => $project_local_settings_file,
-        $default_local_drush_file => $project_local_drush_file,
-      ];
-
-      // Copy files without overwriting.
-      foreach ($copy_map as $from => $to) {
-        if ($file_system->exists($from) && !$file_system->exists($to)) {
-          $file_system->copy($from, $to);
-        }
+    $sites = array_filter(array_map('trim', explode(',', implode(',', (array) $options['multisites']))));
+    $missing = [];
+    foreach (array_unique($sites) as $site) {
+      $siteDir = "$sitesDir/$site";
+      if (!is_dir($siteDir)) {
+        $missing[] = $site;
+        continue;
       }
 
-      foreach ($expand_map as $to) {
-        $file_contents = file_get_contents($to);
-        $file_contents = str_replace(array_keys($xpand_config), array_values($xpand_config), $file_contents);
-        file_put_contents($to, $file_contents);
-      }
-
-      $project_settings_file_contents = file_get_contents($project_settings_file);
-      if (!preg_grep('/^.*?sws\.settings\.php/', explode("\n", $project_settings_file_contents))) {
-        $project_settings_file_contents .= PHP_EOL . "require DRUPAL_ROOT . '/../drush/Commands/contrib/sws-drush-commands/settings/sws.settings.php';" . PHP_EOL;
-        file_put_contents($project_settings_file, $project_settings_file_contents);
-      }
+      $this->copyFile("$templates/default.local.settings.php", "$siteDir/settings/default.local.settings.php");
+      $this->copyFile("$siteDir/settings/default.local.settings.php", "$siteDir/settings/local.settings.php", $database);
+      $this->copyFile("$templates/default.includes.settings.php", "$siteDir/settings/default.includes.settings.php");
+      $this->copyFile("$templates/default.local.drush.yml", "$siteDir/default.local.drush.yml");
+      // The site name is the local URI; sites.php maps it to the directory.
+      $this->copyFile("$siteDir/default.local.drush.yml", "$siteDir/local.drush.yml", ['${uri}' => $site]);
+      $this->copyFile("$sitesDir/default/default.settings.php", "$siteDir/default.settings.php");
+      $this->copyFile("$siteDir/default.settings.php", "$siteDir/settings.php");
+      $this->requireSwsSettings("$siteDir/settings.php");
     }
+
+    if ($missing) {
+      $this->logger()->warning('Skipped sites without a directory in docroot/sites: ' . implode(', ', $missing));
+    }
+    if (!$this->created) {
+      $this->io()->success('All settings files already exist.');
+      return;
+    }
+    $this->io()->success(sprintf('Created %d settings file(s).', count($this->created)));
+    $this->io()->listing($this->created);
   }
 
   /**
@@ -152,15 +145,62 @@ final class SettingsDrushCommands extends DrushCommands
     'dhsi',
     'setup:hash-salt',
   ])]
-  public function hashSalt()
-  {
-    $file_system = $this->localmachineHelper()->getFilesystem();
-    $hash_salt_file = $this->getDir() . '/salt.txt';
-
-    if (!$file_system->exists($hash_salt_file)) {
-      $this->say("Generating hash salt...");
-      file_put_contents($hash_salt_file, StringUtils::generatePassword(55));
+  public function hashSalt(): void {
+    $file = Path::join($this->getDir(), 'salt.txt');
+    if (file_exists($file)) {
+      return;
     }
+    // The same format Drupal uses for hash salts.
+    $this->writeFile($file, rtrim(strtr(base64_encode(random_bytes(55)), '+/', '-_'), '='));
+    $this->io()->writeln('Generated a hash salt in salt.txt.');
+  }
+
+  /**
+   * Copy a file unless the destination already exists.
+   *
+   * @param string $from
+   *   Source file. Nothing happens if it doesn't exist.
+   * @param string $to
+   *   Destination file.
+   * @param array $replacements
+   *   Placeholders to replace in the copy.
+   */
+  private function copyFile(string $from, string $to, array $replacements = []): void {
+    if (!file_exists($from) || file_exists($to)) {
+      return;
+    }
+    $this->writeFile($to, strtr((string) file_get_contents($from), $replacements));
+  }
+
+  /**
+   * Make sure settings.php loads the shared SWS settings.
+   */
+  private function requireSwsSettings(string $settingsFile): void {
+    if (!file_exists($settingsFile)) {
+      $this->logger()->warning("$settingsFile does not exist, so it can't load sws.settings.php.");
+      return;
+    }
+    $contents = (string) file_get_contents($settingsFile);
+    if (preg_match('/^.*sws\.settings\.php/m', $contents)) {
+      return;
+    }
+    file_put_contents($settingsFile, rtrim($contents) . "\n\n" . self::SWS_SETTINGS_REQUIRE . "\n");
+    $this->io()->writeln('Added sws.settings.php to ' . Path::makeRelative($settingsFile, $this->getDir()));
+  }
+
+  /**
+   * Write a file, creating its directory if needed, and record it.
+   */
+  private function writeFile(string $file, string $contents): void {
+    (new Filesystem())->dumpFile($file, $contents);
+    $this->created[] = Path::makeRelative($file, $this->getDir());
+  }
+
+  /**
+   * Write a line to stdout exactly as given, without console formatting.
+   */
+  private function writeRaw(string $line): void {
+    $this->output()->writeln($line, OutputInterface::OUTPUT_RAW);
   }
 
 }
