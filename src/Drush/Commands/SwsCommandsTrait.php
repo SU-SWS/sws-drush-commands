@@ -6,56 +6,65 @@ namespace Drupal\SwsDrush\Drush\Commands;
 
 use Drupal\SwsDrush\Helpers\AcquiaApi;
 use Drupal\SwsDrush\Helpers\LocalMachineHelper;
-use Drupal\SwsDrush\Output\Checklist;
 use Drush\Drush;
 use GuzzleHttp\Client;
-use Symfony\Component\Console\Output\OutputInterface;
 
+/**
+ * Shared helpers for SWS drush commands.
+ *
+ * Project specific command files use this trait as well, so changes to the
+ * public and protected methods here affect them too.
+ */
 trait SwsCommandsTrait {
 
+  /**
+   * Absolute path to the project (composer) root.
+   */
   protected string $dir;
 
+  /**
+   * Helper for running local commands.
+   */
   protected LocalMachineHelper $localMachineHelper;
 
-  protected function getOutputCallback(
-    OutputInterface $output,
-    Checklist $checklist
-  ): \Closure {
-    return static function(mixed $type, mixed $buffer) use ($checklist, $output): void {
-      if (!$output->isVerbose() && $checklist->getItems()) {
-        $checklist->updateProgressBar($buffer);
-      }
-      $output->writeln($buffer, OutputInterface::VERBOSITY_VERY_VERBOSE);
-    };
-  }
-
+  /**
+   * Get the project (composer) root directory.
+   */
   public function getDir(): string {
-    if (isset($this->dir)) {
-      return $this->dir;
-    }
-    /** @var \Drush\Boot\BootstrapManager $bootstrap */
-    $bootstrap = Drush::bootstrapManager();
-    $this->dir = $bootstrap->getComposerRoot();
-    return $this->dir;
+    return $this->dir ??= Drush::bootstrapManager()->getComposerRoot();
   }
 
+  /**
+   * Get a helper for running local commands.
+   *
+   * New code can use Symfony Process and Filesystem directly. This is kept
+   * for the commands and project command files that still use it.
+   */
   public function localMachineHelper(): LocalMachineHelper {
-    if (isset($this->localMachineHelper)) {
-      return $this->localMachineHelper;
+    if (!isset($this->localMachineHelper)) {
+      $this->localMachineHelper = new LocalMachineHelper();
+      $this->localMachineHelper->setLogger($this->logger());
+      $this->localMachineHelper->setInput($this->input());
+      $this->localMachineHelper->setOutput($this->output());
     }
-    $this->getDir();
-
-    $this->localMachineHelper = new LocalMachineHelper();
-    $this->localMachineHelper->setLogger($this->logger());
-    $this->localMachineHelper->setInput($this->input());
-    $this->localMachineHelper->setOutput($this->output());
     return $this->localMachineHelper;
   }
 
+  /**
+   * Make sure an option has a value, asking for it if possible.
+   *
+   * @param string $name
+   *   Option name.
+   * @param callable $asker
+   *   Asks the user for the value when the option is empty and the session is
+   *   interactive.
+   * @param bool $required
+   *   Throw an exception if the option still has no value.
+   */
   protected function ensureOption(string $name, callable $asker, bool $required = FALSE): void {
-    $value = $this->input->getOption($name);
+    $value = $this->input()->getOption($name);
 
-    if ($value === NULL && $this->input->isInteractive()) {
+    if (($value === NULL || $value === []) && $this->input()->isInteractive()) {
       $value = $asker();
     }
 
@@ -65,13 +74,14 @@ trait SwsCommandsTrait {
       ]));
     }
 
-    $this->input->setOption($name, $value);
+    $this->input()->setOption($name, $value);
   }
 
   /**
    * Send a message to a Slack incoming webhook URL.
    *
-   * Silently does nothing if no URL is available.
+   * Silently does nothing if no URL is given and SLACK_NOTIFICATION_URL is
+   * not set. A failure to send is reported but never stops the command.
    */
   protected function sendWebhookNotification(string $message, ?string $url = NULL): void {
     $url = $url ?: getenv('SLACK_NOTIFICATION_URL');
@@ -79,32 +89,28 @@ trait SwsCommandsTrait {
       return;
     }
     try {
-      (new Client())->post($url, ['json' => ['text' => $message]]);
+      (new Client(['timeout' => 10]))->post($url, ['json' => ['text' => $message]]);
     }
     catch (\Throwable $e) {
-      $this->say('Failed to send Slack notification: ' . $e->getMessage());
+      $this->logger()->warning('Failed to send Slack notification: ' . $e->getMessage());
     }
   }
 
   /**
-   * Get a API connection service object.
+   * Get an Acquia Cloud API connection.
    *
-   * @return \Drupal\SwsDrush\Helpers\AcquiaApi
-   *   API connection.
+   * Uses the --app-id, --app-key and --app-secret options, asking for any
+   * that are missing in an interactive session.
    */
   protected function getAcquiaApi(): AcquiaApi {
-    $this->ensureOption('app-id', fn() => $this->io()
-      ->ask('Acquia Application ID'), TRUE);
-    $this->ensureOption('app-key', fn() => $this->io()
-      ->ask('Acquia Application Key'), TRUE);
-    $this->ensureOption('app-secret', fn() => $this->io()
-      ->password('Acquia Application Secret'), TRUE);
+    $this->ensureOption('app-id', fn() => $this->io()->ask('Acquia Application ID'), TRUE);
+    $this->ensureOption('app-key', fn() => $this->io()->ask('Acquia Application Key'), TRUE);
+    $this->ensureOption('app-secret', fn() => $this->io()->password('Acquia Application Secret'), TRUE);
 
-    $appId = $this->input()->getOption('app-id');
-    $appKey = $this->input()->getOption('app-key');
-    $appSecret = $this->input()->getOption('app-secret');
-
-    return new AcquiaApi($appId, $appKey, $appSecret);
+    return new AcquiaApi(
+      $this->input()->getOption('app-key'),
+      $this->input()->getOption('app-secret'),
+    );
   }
 
 }
