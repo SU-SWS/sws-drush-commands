@@ -17,15 +17,14 @@ use Symfony\Component\Yaml\Yaml;
  *
  * Every stack has dev, test and live environments (01dev, 01test and 01live
  * on Acquia). The site list is read directly from each environment's
- * sites.json over SSH, so no API credentials are needed. The web servers come
- * from drush config (`sws.acsf.hosts`), falling back to the ones used by the
- * existing alias files, and each one is checked over SSH before it's used.
+ * sites.json over SSH, so no API credentials are needed. The hosts for each
+ * environment are set in drush config (`sws.acsf.hosts`) as a single host or
+ * a list. With a list, sites are spread across the hosts, and each site keeps
+ * the host it already has so alias files don't churn between builds.
  *
- * Aliases are named @site.dev, @site.test and @site.live. Existing host
- * assignments are kept so alias files don't churn between builds, new sites
- * go to the least loaded web server, and aliases for sites that no longer
- * exist are removed. If an environment can't be read, its existing aliases
- * are left untouched.
+ * Aliases are named @site.dev, @site.test and @site.live. Aliases for sites
+ * that no longer exist are removed. If an environment can't be read, its
+ * existing aliases are left untouched.
  *
  * Example drush.yml config:
  * @code
@@ -33,9 +32,11 @@ use Symfony\Component\Yaml\Yaml;
  *   acsf:
  *     stack: cardinalsites
  *     hosts:
- *       dev: [staging-1.enterprise-g1.hosting.acquia.com]
- *       test: [staging-1.enterprise-g1.hosting.acquia.com]
- *       live: [web-1.enterprise-g1.hosting.acquia.com, web-2.enterprise-g1.hosting.acquia.com]
+ *       dev: staging-1.enterprise-g1.hosting.acquia.com
+ *       test: staging-1.enterprise-g1.hosting.acquia.com
+ *       live:
+ *         - web-1.enterprise-g1.hosting.acquia.com
+ *         - web-2.enterprise-g1.hosting.acquia.com
  * @endcode
  */
 #[CLI\Bootstrap(level: DrupalBootLevels::NONE)]
@@ -65,7 +66,6 @@ final class AliasesDrushCommands extends DrushCommands {
   #[CLI\Option(name: 'stack', description: 'Site Factory stack (Acquia site group), e.g. "cardinalsites". Defaults to sws.acsf.stack config or the existing aliases.')]
   #[CLI\Option(name: 'env', description: 'Comma separated environments to rebuild: dev, test, live. Others are left untouched.')]
   #[CLI\Option(name: 'alias-dir', description: 'Directory for alias files.')]
-  #[CLI\Option(name: 'skip-host-check', description: 'Don\'t verify each web server accepts SSH connections.')]
   #[CLI\Option(name: 'keep-stale', description: 'Keep aliases for sites that no longer exist.')]
   #[CLI\Option(name: 'dry-run', description: 'Show what would change without writing any files.')]
   #[CLI\Usage(name: 'drush aliases', description: 'Build all site aliases into the drush/sites directory.')]
@@ -74,7 +74,6 @@ final class AliasesDrushCommands extends DrushCommands {
     'stack' => NULL,
     'env' => NULL,
     'alias-dir' => 'drush/sites',
-    'skip-host-check' => FALSE,
     'keep-stale' => FALSE,
     'dry-run' => FALSE,
   ]
@@ -92,12 +91,15 @@ final class AliasesDrushCommands extends DrushCommands {
 
     $stack = $this->resolveStack($existing, $options['stack']);
     $hosts = $this->resolveHosts($stack, $envs, $existing);
-    if (!$options['skip-host-check']) {
-      $this->checkHosts($stack, $hosts);
-    }
-
     $fetched = $this->fetchSites($stack, $hosts);
-    $generated = $this->generateAliases($stack, $hosts, $fetched, $existing);
+
+    $generated = [];
+    foreach ($fetched as $env => $sites) {
+      $assigned = $this->assignHosts($env, $sites, $hosts[$env], $existing);
+      foreach ($sites as $site => $domain) {
+        $generated[$site][$env] = $this->buildAlias($domain, $assigned[$site], "$stack.01$env");
+      }
+    }
     $this->writeAliases($stack, $generated, $existing, array_keys($fetched), $options);
 
     $failed = array_diff($envs, array_keys($fetched));
@@ -137,7 +139,7 @@ final class AliasesDrushCommands extends DrushCommands {
   }
 
   /**
-   * Get the web servers for each environment.
+   * Get the hosts for each environment from config or the existing aliases.
    *
    * @param string $stack
    *   Stack name.
@@ -147,57 +149,32 @@ final class AliasesDrushCommands extends DrushCommands {
    *   Existing aliases keyed by site, then environment.
    *
    * @return array
-   *   Host names keyed by environment.
+   *   Lists of host names keyed by environment. Environments without a host
+   *   are left out.
    */
   private function resolveHosts(string $stack, array $envs, array $existing): array {
-    $config = $this->getConfig()->get('sws.acsf.hosts') ?: [];
+    // Each environment can be configured with a single host or a list.
+    $hosts = array_map(fn($envHosts) => array_values(array_filter((array) $envHosts)), array_intersect_key($this->getConfig()->get('sws.acsf.hosts') ?: [], array_flip($envs)));
+    $hosts = array_filter($hosts);
 
+    // Otherwise use the hosts the existing aliases already point to.
     $aliasHosts = [];
     foreach ($existing as $aliases) {
       foreach ($aliases as $alias) {
-        if (isset($alias['host']) && preg_match('/^' . preg_quote($stack, '/') . '\.01(dev|test|live)$/', (string) ($alias['user'] ?? ''), $matches)) {
+        if (isset($alias['host']) && preg_match('/^' . preg_quote($stack, '/') . '\.01(dev|test|live)$/', (string) ($alias['user'] ?? ''), $matches) && in_array($matches[1], $envs, TRUE)) {
           $aliasHosts[$matches[1]][$alias['host']] = $alias['host'];
         }
       }
     }
+    foreach ($aliasHosts as $env => $envHosts) {
+      sort($envHosts);
+      $hosts[$env] ??= $envHosts;
+    }
 
-    $hosts = [];
-    foreach ($envs as $env) {
-      $hosts[$env] = array_values($config[$env] ?? $aliasHosts[$env] ?? []);
-      sort($hosts[$env]);
-      if (!$hosts[$env]) {
-        $this->logger()->error("No web servers are known for $env. Add them to sws.acsf.hosts.$env in drush.yml.");
-      }
+    foreach (array_diff($envs, array_keys($hosts)) as $env) {
+      $this->logger()->error("No host is known for $env. Add it to sws.acsf.hosts.$env in drush.yml.");
     }
     return $hosts;
-  }
-
-  /**
-   * Remove any web servers that don't accept SSH connections.
-   *
-   * @param string $stack
-   *   Stack name.
-   * @param array $hosts
-   *   Host names keyed by environment. Unreachable hosts are removed.
-   */
-  private function checkHosts(string $stack, array &$hosts): void {
-    $checks = [];
-    foreach ($hosts as $env => $envHosts) {
-      foreach ($envHosts as $host) {
-        $checks["$env $host"] = $this->ssh("$stack.01$env", $host, 'true');
-      }
-    }
-    $this->io()->writeln(sprintf('Checking %d web servers...', count($checks)));
-    $this->waitForAll($checks);
-
-    foreach ($checks as $key => $process) {
-      if ($process->isSuccessful()) {
-        continue;
-      }
-      [$env, $host] = explode(' ', $key);
-      $hosts[$env] = array_values(array_diff($hosts[$env], [$host]));
-      $this->logger()->warning(sprintf('Skipping %s for %s: %s', $host, $env, trim($process->getErrorOutput()) ?: 'exit ' . $process->getExitCode()));
-    }
   }
 
   /**
@@ -209,45 +186,49 @@ final class AliasesDrushCommands extends DrushCommands {
    * @param string $stack
    *   Stack name.
    * @param array $hosts
-   *   Host names keyed by environment.
+   *   Lists of host names keyed by environment. Hosts that can't be connected
+   *   to are removed, as long as the environment has another host.
    *
    * @return array
    *   Primary domains keyed by environment, then site name. Environments that
-   *   couldn't be read are left out.
+   *   couldn't be read from any of their hosts are left out.
    */
-  private function fetchSites(string $stack, array $hosts): array {
-    $remaining = array_filter($hosts);
-    foreach (array_diff_key($hosts, $remaining) as $env => $envHosts) {
-      $this->logger()->error("No reachable web servers for $env.");
-    }
-
+  private function fetchSites(string $stack, array &$hosts): array {
     $fetched = [];
-    // Each round tries the next host for every environment still unread.
-    for ($attempt = 0; $remaining; $attempt++) {
+    $unreachable = [];
+    // Read every environment at once, moving on to the next host for any
+    // environment whose host failed.
+    for ($attempt = 0; $remaining = array_diff_key(array_filter($hosts, fn($envHosts) => isset($envHosts[$attempt])), $fetched); $attempt++) {
       $processes = [];
       foreach ($remaining as $env => $envHosts) {
-        if (!isset($envHosts[$attempt])) {
-          unset($remaining[$env]);
-          continue;
-        }
         $user = "$stack.01$env";
-        $processes[$env] = $this->ssh($user, $envHosts[$attempt], "cat /mnt/files/$user/files-private/sites.json");
+        $processes[$env] = new Process(['ssh', ...self::SSH_OPTIONS, "$user@{$envHosts[$attempt]}", "cat /mnt/files/$user/files-private/sites.json"]);
+        $processes[$env]->setTimeout(120);
+        $processes[$env]->start();
       }
-      $this->waitForAll($processes);
 
       foreach ($processes as $env => $process) {
+        $process->wait();
         try {
           if (!$process->isSuccessful()) {
             throw new \RuntimeException(trim($process->getErrorOutput()) ?: 'exit ' . $process->getExitCode());
           }
           $fetched[$env] = $this->parseSitesJson($process->getOutput(), $stack, $env);
-          unset($remaining[$env]);
           $this->io()->writeln(sprintf('Found %d sites on %s.', count($fetched[$env]), $env));
         }
         catch (\Throwable $e) {
-          $this->logger()->warning(sprintf('Unable to read sites.json for %s from %s: %s', $env, $remaining[$env][$attempt], $e->getMessage()));
+          $this->logger()->warning(sprintf('Unable to read sites.json for %s from %s: %s', $env, $hosts[$env][$attempt], $e->getMessage()));
+          // SSH exits with 255 when it can't connect, so don't send any sites
+          // to that host.
+          if ($process->getExitCode() === 255 && count($hosts[$env]) > 1) {
+            $unreachable[$env][] = $hosts[$env][$attempt];
+          }
         }
       }
+    }
+    foreach ($unreachable as $env => $envHosts) {
+      $hosts[$env] = array_values(array_diff($hosts[$env], $envHosts));
+      $this->logger()->warning(sprintf('No %s aliases will use %s.', $env, implode(', ', $envHosts)));
     }
     return $fetched;
   }
@@ -281,47 +262,41 @@ final class AliasesDrushCommands extends DrushCommands {
   }
 
   /**
-   * Build the alias for every site, keeping existing host assignments.
+   * Pick a host for each site in an environment.
    *
-   * @param string $stack
-   *   Stack name.
-   * @param array $hosts
-   *   Host names keyed by environment.
-   * @param array $fetched
-   *   Domains keyed by environment, then site name.
+   * Sites keep the host they already have if it's still one of the
+   * environment's hosts, and everything else goes to the least loaded host.
+   *
+   * @param string $env
+   *   Environment.
+   * @param array $sites
+   *   Domains keyed by site name.
+   * @param string[] $hosts
+   *   The environment's hosts.
    * @param array $existing
    *   Existing aliases keyed by site, then environment.
    *
    * @return array
-   *   Aliases keyed by site, then environment.
+   *   Host names keyed by site name.
    */
-  private function generateAliases(string $stack, array $hosts, array $fetched, array $existing): array {
-    $aliases = [];
-    foreach ($fetched as $env => $sites) {
-      $load = array_fill_keys($hosts[$env], 0);
-      $assigned = [];
+  private function assignHosts(string $env, array $sites, array $hosts, array $existing): array {
+    $load = array_fill_keys($hosts, 0);
+    $assigned = [];
 
-      // Keep sites on the web server they already use, if it's still valid.
-      // Aliases from before the rename to @site.live are named @site.01live.
-      foreach (array_keys($sites) as $site) {
-        $host = $existing[$site][$env]['host'] ?? $existing[$site]["01$env"]['host'] ?? NULL;
-        if ($host && isset($load[$host])) {
-          $assigned[$site] = $host;
-          $load[$host]++;
-        }
-      }
-      // Spread everything else across the least loaded web servers.
-      foreach (array_diff_key($sites, $assigned) as $site => $domain) {
-        $host = array_keys($load, min($load))[0];
+    // Aliases from before the rename to @site.live are named @site.01live.
+    foreach (array_keys($sites) as $site) {
+      $host = $existing[$site][$env]['host'] ?? $existing[$site]["01$env"]['host'] ?? NULL;
+      if ($host && isset($load[$host])) {
         $assigned[$site] = $host;
         $load[$host]++;
       }
-
-      foreach ($sites as $site => $domain) {
-        $aliases[$site][$env] = $this->buildAlias($domain, $assigned[$site], "$stack.01$env");
-      }
     }
-    return $aliases;
+    foreach (array_diff_key($sites, $assigned) as $site => $domain) {
+      $host = array_keys($load, min($load))[0];
+      $assigned[$site] = $host;
+      $load[$host]++;
+    }
+    return $assigned;
   }
 
   /**
@@ -441,28 +416,6 @@ final class AliasesDrushCommands extends DrushCommands {
     }
     file_put_contents("$file.tmp", $contents);
     rename("$file.tmp", $file);
-  }
-
-  /**
-   * Start an SSH command on a remote host.
-   */
-  private function ssh(string $user, string $host, string $command): Process {
-    $process = new Process(['ssh', ...self::SSH_OPTIONS, "$user@$host", $command]);
-    $process->setTimeout(120);
-    $process->start();
-    return $process;
-  }
-
-  /**
-   * Wait for every process to finish.
-   *
-   * @param \Symfony\Component\Process\Process[] $processes
-   *   Running processes.
-   */
-  private function waitForAll(array $processes): void {
-    foreach ($processes as $process) {
-      $process->wait();
-    }
   }
 
 }
