@@ -4,251 +4,465 @@ declare(strict_types=1);
 
 namespace Drupal\SwsDrush\Drush\Commands;
 
-use AcquiaCloudApi\Response\ApplicationResponse;
-use Drupal\SwsDrush\Helpers\AcquiaApi;
 use Drush\Attributes as CLI;
 use Drush\Boot\DrupalBootLevels;
 use Drush\Commands\DrushCommands;
-use Drush\Drush;
 use Drush\Exceptions\CommandFailedException;
-use Symfony\Component\Console\Input\InputOption;
 use Symfony\Component\Filesystem\Path;
+use Symfony\Component\Process\Process;
 use Symfony\Component\Yaml\Yaml;
 
 /**
- * A Drush command file.
+ * Build drush site aliases for every site on a Site Factory stack.
+ *
+ * Every stack has dev, test and live environments (01dev, 01test and 01live
+ * on Acquia). The site list is read directly from each environment's
+ * sites.json over SSH, so no API credentials are needed. The web servers come
+ * from drush config (`sws.acsf.hosts`), falling back to the ones used by the
+ * existing alias files, and each one is checked over SSH before it's used.
+ *
+ * Aliases are named @site.dev, @site.test and @site.live. Existing host
+ * assignments are kept so alias files don't churn between builds, new sites
+ * go to the least loaded web server, and aliases for sites that no longer
+ * exist are removed. If an environment can't be read, its existing aliases
+ * are left untouched.
+ *
+ * Example drush.yml config:
+ * @code
+ * sws:
+ *   acsf:
+ *     stack: cardinalsites
+ *     hosts:
+ *       dev: [staging-1.enterprise-g1.hosting.acquia.com]
+ *       test: [staging-1.enterprise-g1.hosting.acquia.com]
+ *       live: [web-1.enterprise-g1.hosting.acquia.com, web-2.enterprise-g1.hosting.acquia.com]
+ * @endcode
  */
 #[CLI\Bootstrap(level: DrupalBootLevels::NONE)]
 final class AliasesDrushCommands extends DrushCommands {
 
   use SwsCommandsTrait;
 
-  protected string $appId;
+  /**
+   * Environments on every stack, prefixed with "01" on Acquia.
+   */
+  private const ENVIRONMENTS = ['dev', 'test', 'live'];
 
-  protected string $aliasDir;
+  /**
+   * Never prompt for a password and give up quickly on a dead host.
+   */
+  private const SSH_OPTIONS = ['-o', 'BatchMode=yes', '-o', 'ConnectTimeout=15'];
 
-  protected AcquiaApi $acquiaApi;
+  /**
+   * Absolute path to the alias directory.
+   */
+  private string $aliasDir;
 
   /**
    * Build Drush Aliases.
-   *
-   * Replaces `blt aliases`.
    */
   #[CLI\Command(name: 'sws:acquia:alias-build', aliases: ['aliases', 'sab'])]
-  #[CLI\Option(name: 'app-id', description: 'Acquia application ID')]
-  #[CLI\Option(name: 'app-key', description: 'Acquia API key')]
-  #[CLI\Option(name: 'app-secret', description: 'Acquia API secret')]
-  #[CLI\Option(name: 'alias-dir', description: 'Directory for alias files')]
-  #[CLI\Usage(name: 'drush aliases --app-id=foo --app-key=bar --app-secret=baz --alias-dir=drush/sites', description: 'Build all site aliases into drush/sites directory.')]
-  public function buildAliases($options = [
-    'app-id' => InputOption::VALUE_REQUIRED,
-    'app-key' => InputOption::VALUE_REQUIRED,
-    'app-secret' => InputOption::VALUE_REQUIRED,
+  #[CLI\Option(name: 'stack', description: 'Site Factory stack (Acquia site group), e.g. "cardinalsites". Defaults to sws.acsf.stack config or the existing aliases.')]
+  #[CLI\Option(name: 'env', description: 'Comma separated environments to rebuild: dev, test, live. Others are left untouched.')]
+  #[CLI\Option(name: 'alias-dir', description: 'Directory for alias files.')]
+  #[CLI\Option(name: 'skip-host-check', description: 'Don\'t verify each web server accepts SSH connections.')]
+  #[CLI\Option(name: 'keep-stale', description: 'Keep aliases for sites that no longer exist.')]
+  #[CLI\Option(name: 'dry-run', description: 'Show what would change without writing any files.')]
+  #[CLI\Usage(name: 'drush aliases', description: 'Build all site aliases into the drush/sites directory.')]
+  #[CLI\Usage(name: 'drush aliases --env=live --dry-run', description: 'Show what would change in the live aliases.')]
+  public function buildAliases(array $options = [
+    'stack' => NULL,
+    'env' => NULL,
     'alias-dir' => 'drush/sites',
+    'skip-host-check' => FALSE,
+    'keep-stale' => FALSE,
+    'dry-run' => FALSE,
   ]
-  ) {
-    /** @var \Drush\Boot\BootstrapManager $bootstrap */
-    $bootstrap = Drush::bootstrapManager();
-    $this->aliasDir = $this->input()
-      ->getOption('alias-dir') ?: Path::join($bootstrap->getComposerRoot(), 'drush', 'sites');
+  ): void {
+    $this->aliasDir = Path::makeAbsolute($options['alias-dir'] ?: 'drush/sites', $this->getDir());
+    $existing = $this->readExistingAliases();
 
-    $this->acquiaApi = $this->getAcquiaApi();
-    $this->appId = $this->input()->getOption('app-id');
-    $site = $this->acquiaApi->acquiaApplications->get($this->appId);
-
-    $this->appId = $this->input()->getOption('app-id');
-
-    // Build alias files.
-    $this->getSiteAliases($site);
-  }
-
-  /**
-   * Gets generated drush site aliases.
-   *
-   * @param \AcquiaCloudApi\Response\ApplicationResponse $site
-   *   The Acquia subscription that aliases will be generated for.
-   *
-   * @throws \Exception
-   */
-  protected function getSiteAliases(ApplicationResponse $site) {
-    $sites = [];
-    $this->io()
-      ->writeln("<info>Gathering sites list from Acquia Cloud.</info>");
-
-    $environments = $this->acquiaApi->acquiaEnvironments->getAll($this->appId);
-    $hosting = $site->hosting->type;
-    $site_split = explode(':', $site->hosting->id);
-
-    foreach ($environments as $env) {
-      $environment_servers = $this->acquiaApi->acquiaServers->getAll($env->uuid);
-      $web_servers = array_filter($environment_servers->getArrayCopy(), function($server) {
-        return in_array('web', $server->roles);
-      });
-
-      $domains = $env->domains;
-      $this->say('<info>Found ' . count($domains) . ' domains for environment ' . $env->name . ', writing aliases...</info>');
-
-      $sshFull = $env->sshUrl;
-      $ssh_split = explode('@', $env->sshUrl);
-      $envName = $env->name;
-      $remoteHost = $ssh_split[1];
-      $remoteUser = $ssh_split[0];
-
-      if (in_array($hosting, ['ace', 'acp'])) {
-        $siteID = $site_split[1];
-        $uri = $env->domains[0];
-        $sites[$siteID][$envName] = ['uri' => $uri];
-        $siteAlias = $this->getAliases($uri, $envName, $remoteHost, $remoteUser);
-        $sites[$siteID][$envName] = $siteAlias[$envName];
-      }
-
-      if ($hosting == 'acsf') {
-        $this->say('<info>ACSF project detected - generating sites data....</info>');
-
-        $acsf_sites = [];
-        try {
-          $acsf_sites = $this->getSitesJson($sshFull, $remoteUser);
-        }
-        catch (\Exception $e) {
-          $this->logger->error("Could not fetch ACSF data for $envName. Error: " . $e->getMessage());
-        }
-
-        // Look for list of sites and loop over it.
-        if ($acsf_sites) {
-          $server_key = 0;
-          foreach ($acsf_sites['sites'] as $name => $info) {
-            // Reset uri value to identify non-primary domains.
-            $uri = NULL;
-            $siteID = NULL;
-
-            // Get site prefix from main domain.
-            if (strpos($name, '.acsitefactory.com')) {
-              $acsf_site_name = explode('.', $name, 2);
-              $siteID = $acsf_site_name[0];
-            }
-            if (!empty($siteID)) {
-              $uri = $name;
-            }
-
-            // Skip sites without primary domain as the alias will be invalid.
-            if (isset($uri)) {
-              // Pick a web server to use as the host.
-              $server_key = isset($web_servers[$server_key]) ? $server_key : key($web_servers);
-              $server = $web_servers[$server_key];
-              $server_key++;
-
-              $sites[$siteID][$envName] = ['uri' => $uri];
-              $siteAlias = $this->getAliases($uri, $envName, $server->hostname, $remoteUser, $siteID);
-              $sites[$siteID][$envName] = $siteAlias[$envName];
-            }
-          }
-        }
+    $envs = self::ENVIRONMENTS;
+    if ($options['env']) {
+      $envs = array_intersect(self::ENVIRONMENTS, array_map(fn($env) => preg_replace('/^01/', '', trim($env)), explode(',', $options['env'])));
+      if (!$envs) {
+        throw new CommandFailedException('Invalid environment. Use dev, test, or live.');
       }
     }
 
-    // Write the alias files to disk.
-    foreach ($sites as $siteID => $aliases) {
-      $this->writeSiteAliases($siteID, $aliases);
+    $stack = $this->resolveStack($existing, $options['stack']);
+    $hosts = $this->resolveHosts($stack, $envs, $existing);
+    if (!$options['skip-host-check']) {
+      $this->checkHosts($stack, $hosts);
+    }
+
+    $fetched = $this->fetchSites($stack, $hosts);
+    $generated = $this->generateAliases($stack, $hosts, $fetched, $existing);
+    $this->writeAliases($stack, $generated, $existing, array_keys($fetched), $options);
+
+    $failed = array_diff($envs, array_keys($fetched));
+    if ($failed) {
+      throw new CommandFailedException(sprintf('Unable to read sites for %s. Existing aliases for those environments were left unchanged.', implode(', ', $failed)));
     }
   }
 
   /**
-   * Generates a site alias for valid domains.
+   * Get the stack name from the option, config, or existing aliases.
    *
-   * @param string $uri
-   *   The unique site url.
-   * @param string $envName
-   *   The current environment.
-   * @param string $remoteHost
-   *   The remote host.
-   * @param string $remoteUser
-   *   The remote user.
-   *
-   * @return array|FALSE
-   *   The full alias for this site, FALSE if skipped.
+   * @param array $existing
+   *   Existing aliases keyed by site, then environment.
+   * @param string|null $stack
+   *   Stack name from the command option.
    */
-  protected function getAliases(string $uri, string $envName, string $remoteHost, string $remoteUser): array|false {
-    $alias = [];
-    // Skip wildcard domains.
-    $skip_site = FALSE;
-    if (str_contains($uri, ':*')) {
-      $skip_site = TRUE;
+  private function resolveStack(array $existing, ?string $stack): string {
+    $stack = $stack ?: $this->getConfig()->get('sws.acsf.stack');
+    if ($stack) {
+      return $stack;
     }
 
-    if (!$skip_site) {
-      $docroot = '/var/www/html/' . $remoteUser . '/docroot';
-      $alias[$envName]['uri'] = $uri;
-      $alias[$envName]['host'] = $remoteHost;
-      $alias[$envName]['options'] = [];
-      $alias[$envName]['paths'] = ['dump-dir' => '/mnt/tmp'];
-      $alias[$envName]['root'] = $docroot;
-      $alias[$envName]['user'] = $remoteUser;
-      $alias[$envName]['ssh'] = ['options' => '-p 22', 'tty' => 0];
-      $alias[$envName]['env-vars']['WEBHEAD'] = substr($remoteHost, 0, strpos($remoteHost, '.'));
-
-      return $alias;
+    // Use the most common ssh user prefix in the existing aliases.
+    $stacks = [];
+    foreach ($existing as $aliases) {
+      foreach ($aliases as $alias) {
+        if (preg_match('/^(.+)\.01(dev|test|live)$/', (string) ($alias['user'] ?? ''), $matches)) {
+          $stacks[$matches[1]] = ($stacks[$matches[1]] ?? 0) + 1;
+        }
+      }
     }
-    return FALSE;
+    if (!$stacks) {
+      throw new CommandFailedException('Unable to determine the stack. Set sws.acsf.stack in drush.yml or pass --stack.');
+    }
+    arsort($stacks);
+    return (string) array_key_first($stacks);
   }
 
   /**
-   * Gets ACSF sites info without secondary API calls or Drupal bootstrap.
+   * Get the web servers for each environment.
    *
-   * @param string $sshFull
-   *   The full ssh connection string for this environment.
-   * @param string $remoteUser
-   *   The site.env remoteUser string used in the remote private files path.
+   * @param string $stack
+   *   Stack name.
+   * @param string[] $envs
+   *   Environments to build.
+   * @param array $existing
+   *   Existing aliases keyed by site, then environment.
    *
    * @return array
-   *   An array of ACSF site data for the current environment.
+   *   Host names keyed by environment.
    */
-  protected function getSitesJson($sshFull, $remoteUser) {
-    $this->say('Getting ACSF sites.json information...');
-    // Rsync the file.
+  private function resolveHosts(string $stack, array $envs, array $existing): array {
+    $config = $this->getConfig()->get('sws.acsf.hosts') ?: [];
 
-    $destination_dir = sys_get_temp_dir() . '/acquia';
-    if (!file_exists($destination_dir)) {
-      mkdir($destination_dir);
+    $aliasHosts = [];
+    foreach ($existing as $aliases) {
+      foreach ($aliases as $alias) {
+        if (isset($alias['host']) && preg_match('/^' . preg_quote($stack, '/') . '\.01(dev|test|live)$/', (string) ($alias['user'] ?? ''), $matches)) {
+          $aliasHosts[$matches[1]][$alias['host']] = $alias['host'];
+        }
+      }
     }
 
-    $result = $this->localMachineHelper()->execute([
-      'rsync',
-      "$sshFull:/mnt/files/$remoteUser/files-private/sites.json",
-      "$destination_dir/sites.json",
-    ], NULL, $this->dir, FALSE);
-    if (!$result->isSuccessful()) {
-      throw new CommandFailedException($result->getErrorOutput(), $result->getExitCode());
+    $hosts = [];
+    foreach ($envs as $env) {
+      $hosts[$env] = array_values($config[$env] ?? $aliasHosts[$env] ?? []);
+      sort($hosts[$env]);
+      if (!$hosts[$env]) {
+        $this->logger()->error("No web servers are known for $env. Add them to sws.acsf.hosts.$env in drush.yml.");
+      }
     }
-
-    $fullPath = $destination_dir . '/sites.json';
-    $response_body = file_get_contents($fullPath);
-    $sites_json = json_decode($response_body, TRUE);
-
-    return $sites_json;
+    return $hosts;
   }
 
   /**
-   * Writes site aliases to disk.
+   * Remove any web servers that don't accept SSH connections.
    *
-   * @param string|int $site_id
-   *   The siteID or alias group.
-   * @param array $aliases
-   *   The alias array for this site group.
-   *
-   * @return string
-   *   The alias site group file path.
-   *
-   * @throws \Exception
+   * @param string $stack
+   *   Stack name.
+   * @param array $hosts
+   *   Host names keyed by environment. Unreachable hosts are removed.
    */
-  protected function writeSiteAliases(string|int $site_id, array $aliases) {
-    $file_system = $this->localmachineHelper()->getFilesystem();
-    if (!is_dir($this->aliasDir)) {
-      $file_system->mkdir($this->aliasDir);
+  private function checkHosts(string $stack, array &$hosts): void {
+    $checks = [];
+    foreach ($hosts as $env => $envHosts) {
+      foreach ($envHosts as $host) {
+        $checks["$env $host"] = $this->ssh("$stack.01$env", $host, 'true');
+      }
     }
-    $filePath = $this->aliasDir . '/' . $site_id . '.site.yml';
+    $this->io()->writeln(sprintf('Checking %d web servers...', count($checks)));
+    $this->waitForAll($checks);
 
-    file_put_contents($filePath, Yaml::dump($aliases, 99, 2));
-    return $filePath;
+    foreach ($checks as $key => $process) {
+      if ($process->isSuccessful()) {
+        continue;
+      }
+      [$env, $host] = explode(' ', $key);
+      $hosts[$env] = array_values(array_diff($hosts[$env], [$host]));
+      $this->logger()->warning(sprintf('Skipping %s for %s: %s', $host, $env, trim($process->getErrorOutput()) ?: 'exit ' . $process->getExitCode()));
+    }
+  }
+
+  /**
+   * Read the site list from each environment's sites.json.
+   *
+   * The file is streamed over SSH and only kept in memory, since it contains
+   * each site's API key.
+   *
+   * @param string $stack
+   *   Stack name.
+   * @param array $hosts
+   *   Host names keyed by environment.
+   *
+   * @return array
+   *   Primary domains keyed by environment, then site name. Environments that
+   *   couldn't be read are left out.
+   */
+  private function fetchSites(string $stack, array $hosts): array {
+    $remaining = array_filter($hosts);
+    foreach (array_diff_key($hosts, $remaining) as $env => $envHosts) {
+      $this->logger()->error("No reachable web servers for $env.");
+    }
+
+    $fetched = [];
+    // Each round tries the next host for every environment still unread.
+    for ($attempt = 0; $remaining; $attempt++) {
+      $processes = [];
+      foreach ($remaining as $env => $envHosts) {
+        if (!isset($envHosts[$attempt])) {
+          unset($remaining[$env]);
+          continue;
+        }
+        $user = "$stack.01$env";
+        $processes[$env] = $this->ssh($user, $envHosts[$attempt], "cat /mnt/files/$user/files-private/sites.json");
+      }
+      $this->waitForAll($processes);
+
+      foreach ($processes as $env => $process) {
+        try {
+          if (!$process->isSuccessful()) {
+            throw new \RuntimeException(trim($process->getErrorOutput()) ?: 'exit ' . $process->getExitCode());
+          }
+          $fetched[$env] = $this->parseSitesJson($process->getOutput(), $stack, $env);
+          unset($remaining[$env]);
+          $this->io()->writeln(sprintf('Found %d sites on %s.', count($fetched[$env]), $env));
+        }
+        catch (\Throwable $e) {
+          $this->logger()->warning(sprintf('Unable to read sites.json for %s from %s: %s', $env, $remaining[$env][$attempt], $e->getMessage()));
+        }
+      }
+    }
+    return $fetched;
+  }
+
+  /**
+   * Get the primary Site Factory domain for each site in sites.json.
+   *
+   * @return array
+   *   Domains keyed by site name.
+   */
+  private function parseSitesJson(string $json, string $stack, string $env): array {
+    $data = json_decode($json, TRUE, 512, JSON_THROW_ON_ERROR);
+    if (isset($data['cloud']) && ($data['cloud']['site'] ?? NULL) !== $stack) {
+      throw new \RuntimeException("sites.json belongs to {$data['cloud']['site']}.{$data['cloud']['env']}, not $stack.01$env.");
+    }
+    if (empty($data['sites'])) {
+      throw new \RuntimeException('sites.json has no sites.');
+    }
+
+    $sites = [];
+    foreach (array_keys($data['sites']) as $domain) {
+      // Only the *.acsitefactory.com domain is guaranteed to exist for every
+      // site, and its first part is the site name.
+      if (str_contains($domain, ':*') || !str_contains($domain, '.acsitefactory.com')) {
+        continue;
+      }
+      $sites[strstr($domain, '.', TRUE)] = $domain;
+    }
+    ksort($sites);
+    return $sites;
+  }
+
+  /**
+   * Build the alias for every site, keeping existing host assignments.
+   *
+   * @param string $stack
+   *   Stack name.
+   * @param array $hosts
+   *   Host names keyed by environment.
+   * @param array $fetched
+   *   Domains keyed by environment, then site name.
+   * @param array $existing
+   *   Existing aliases keyed by site, then environment.
+   *
+   * @return array
+   *   Aliases keyed by site, then environment.
+   */
+  private function generateAliases(string $stack, array $hosts, array $fetched, array $existing): array {
+    $aliases = [];
+    foreach ($fetched as $env => $sites) {
+      $load = array_fill_keys($hosts[$env], 0);
+      $assigned = [];
+
+      // Keep sites on the web server they already use, if it's still valid.
+      // Aliases from before the rename to @site.live are named @site.01live.
+      foreach (array_keys($sites) as $site) {
+        $host = $existing[$site][$env]['host'] ?? $existing[$site]["01$env"]['host'] ?? NULL;
+        if ($host && isset($load[$host])) {
+          $assigned[$site] = $host;
+          $load[$host]++;
+        }
+      }
+      // Spread everything else across the least loaded web servers.
+      foreach (array_diff_key($sites, $assigned) as $site => $domain) {
+        $host = array_keys($load, min($load))[0];
+        $assigned[$site] = $host;
+        $load[$host]++;
+      }
+
+      foreach ($sites as $site => $domain) {
+        $aliases[$site][$env] = $this->buildAlias($domain, $assigned[$site], "$stack.01$env");
+      }
+    }
+    return $aliases;
+  }
+
+  /**
+   * Build a single drush site alias.
+   */
+  private function buildAlias(string $uri, string $host, string $user): array {
+    return [
+      'uri' => $uri,
+      'host' => $host,
+      'options' => [],
+      'paths' => ['dump-dir' => '/mnt/tmp'],
+      'root' => "/var/www/html/$user/docroot",
+      'user' => $user,
+      'ssh' => ['options' => '-p 22', 'tty' => 0],
+      'env-vars' => ['WEBHEAD' => strstr($host, '.', TRUE) ?: $host],
+    ];
+  }
+
+  /**
+   * Merge the generated aliases into the alias files.
+   *
+   * Only environments that were read successfully are changed. Environments
+   * that belong to other stacks or were added by hand are kept.
+   *
+   * @param string $stack
+   *   Stack name.
+   * @param array $generated
+   *   Generated aliases keyed by site, then environment.
+   * @param array $existing
+   *   Existing aliases keyed by site, then environment.
+   * @param string[] $envs
+   *   Environments that were read successfully.
+   * @param array $options
+   *   Command options.
+   */
+  private function writeAliases(string $stack, array $generated, array $existing, array $envs, array $options): void {
+    $counts = ['created' => [], 'updated' => [], 'removed' => [], 'unchanged' => []];
+
+    foreach (array_unique([...array_keys($existing), ...array_keys($generated)]) as $site) {
+      $aliases = $existing[$site] ?? [];
+      foreach ($envs as $env) {
+        // Replace aliases from before the rename to @site.live.
+        if (($aliases["01$env"]['user'] ?? NULL) === "$stack.01$env") {
+          unset($aliases["01$env"]);
+        }
+
+        if (isset($generated[$site][$env])) {
+          $aliases[$env] = $generated[$site][$env];
+        }
+        elseif (isset($aliases[$env]) && !$options['keep-stale'] && ($aliases[$env]['user'] ?? NULL) === "$stack.01$env") {
+          // The site no longer exists on this environment.
+          unset($aliases[$env]);
+        }
+      }
+
+      $file = "{$this->aliasDir}/$site.site.yml";
+      if (($existing[$site] ?? []) === $aliases) {
+        // Compare the data rather than the text so hand written files aren't
+        // reformatted.
+        $counts['unchanged'][] = $site;
+        continue;
+      }
+      if (!$aliases) {
+        $counts['removed'][] = $site;
+        if (!$options['dry-run']) {
+          unlink($file);
+        }
+        continue;
+      }
+
+      $counts[isset($existing[$site]) ? 'updated' : 'created'][] = $site;
+      if (!$options['dry-run']) {
+        $this->writeFile($file, Yaml::dump($aliases, 99, 2));
+      }
+    }
+
+    $this->io()->definitionList(...array_map(fn($label, $sites) => [ucfirst($label) => count($sites)], array_keys($counts), $counts));
+    if ($counts['created']) {
+      $this->io()->writeln('Created: ' . implode(', ', $counts['created']));
+    }
+    if ($counts['removed']) {
+      $this->io()->writeln('Removed: ' . implode(', ', $counts['removed']));
+    }
+    if ($options['dry-run']) {
+      $this->io()->note('Dry run: no files were changed.');
+    }
+    elseif ($envs) {
+      $this->io()->success(sprintf('Aliases for %s written to %s.', implode(', ', $envs), $this->aliasDir));
+    }
+  }
+
+  /**
+   * Read every existing alias file in the alias directory.
+   *
+   * @return array
+   *   Aliases keyed by site, then environment.
+   */
+  private function readExistingAliases(): array {
+    $aliases = [];
+    foreach (glob("{$this->aliasDir}/*.site.yml") ?: [] as $file) {
+      try {
+        $aliases[basename($file, '.site.yml')] = Yaml::parseFile($file) ?: [];
+      }
+      catch (\Throwable $e) {
+        $this->logger()->warning("Ignoring unreadable alias file $file: " . $e->getMessage());
+      }
+    }
+    return $aliases;
+  }
+
+  /**
+   * Write a file atomically so an interrupted build can't leave it truncated.
+   */
+  private function writeFile(string $file, string $contents): void {
+    if (!is_dir(dirname($file)) && !mkdir(dirname($file), 0775, TRUE)) {
+      throw new CommandFailedException('Unable to create ' . dirname($file));
+    }
+    file_put_contents("$file.tmp", $contents);
+    rename("$file.tmp", $file);
+  }
+
+  /**
+   * Start an SSH command on a remote host.
+   */
+  private function ssh(string $user, string $host, string $command): Process {
+    $process = new Process(['ssh', ...self::SSH_OPTIONS, "$user@$host", $command]);
+    $process->setTimeout(120);
+    $process->start();
+    return $process;
+  }
+
+  /**
+   * Wait for every process to finish.
+   *
+   * @param \Symfony\Component\Process\Process[] $processes
+   *   Running processes.
+   */
+  private function waitForAll(array $processes): void {
+    foreach ($processes as $process) {
+      $process->wait();
+    }
   }
 
 }

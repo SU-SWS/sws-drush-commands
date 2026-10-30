@@ -625,7 +625,7 @@ final class AcsfDrushCommands extends DrushCommands {
     $sites = [];
     foreach ($this->siteAliasManager->getMultiple() ?: [] as $alias) {
       $name = $alias->name();
-      if (!str_ends_with($name, ".01$env") || !$alias->get('host')) {
+      if (!str_ends_with($name, ".$env") || !$alias->get('host')) {
         continue;
       }
       if ($limitTo && !in_array($this->siteName($name), $limitTo, TRUE)) {
@@ -640,10 +640,11 @@ final class AcsfDrushCommands extends DrushCommands {
   /**
    * Get the bare site name from an alias name.
    *
-   * Accepts "foo", "@foo.01live" or "@location.foo.01live" and returns "foo".
+   * Accepts "foo", "@foo.live" or "@location.foo.live" and returns "foo". The
+   * older "@foo.01live" form is accepted as well.
    */
   private function siteName(string $alias): string {
-    return preg_replace('/^(?:.*\.)?([^.]+)$/', '$1', preg_replace('/\.01\w+$/', '', ltrim($alias, '@')));
+    return preg_replace('/^(?:.*\.)?([^.]+)$/', '$1', preg_replace('/\.(01)?(dev|test|live)$/', '', ltrim($alias, '@')));
   }
 
   /**
