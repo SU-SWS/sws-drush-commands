@@ -240,7 +240,7 @@ final class TestsDrushCommands extends DrushCommands {
     $config = Path::join($root, 'tests', 'codeception.yml');
 
     if (file_exists($dist)) {
-      (new Filesystem())->copy($dist, $config, TRUE);
+      (new Filesystem())->copy($dist, $config);
     }
     if (!file_exists($config)) {
       throw new CommandFailedException('Neither tests/codeception.dist.yml nor tests/codeception.yml exists.');
