@@ -18,8 +18,9 @@ use Symfony\Component\Process\Process;
  * Build a deployable artifact of the codebase and push it to git.
  *
  * The artifact is the committed source code plus production composer
- * dependencies, sanitized of text files that shouldn't be public, committed
- * on top of the destination branch and pushed to one or more git remotes.
+ * dependencies, sanitized of text files that shouldn't be public and of
+ * core's install.php, committed on top of the destination branch and pushed
+ * to one or more git remotes.
  */
 #[CLI\Bootstrap(level: DrupalBootLevels::NONE)]
 final class ArtifactDeploymentDrushCommands extends DrushCommands {
@@ -378,7 +379,11 @@ final class ArtifactDeploymentDrushCommands extends DrushCommands {
       ->ignoreVCS(FALSE)
       ->name('.git');
 
+    // Deployed sites are never installed through the web installer.
     $paths = [];
+    if (is_file("$docroot/core/install.php")) {
+      $paths["$docroot/core/install.php"] = "$docroot/core/install.php";
+    }
     foreach ($finders as $finder) {
       foreach ($finder as $file) {
         $paths[$file->getPathname()] = $file->getPathname();
