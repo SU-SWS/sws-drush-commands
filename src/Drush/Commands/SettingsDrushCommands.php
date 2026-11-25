@@ -192,7 +192,7 @@ final class SettingsDrushCommands extends DrushCommands {
    * Write a file, creating its directory if needed, and record it.
    */
   private function writeFile(string $file, string $contents): void {
-    (new Filesystem())->dumpFile($file, $contents);
+    new Filesystem()->dumpFile($file, $contents);
     $this->created[] = Path::makeRelative($file, $this->getDir());
   }
 

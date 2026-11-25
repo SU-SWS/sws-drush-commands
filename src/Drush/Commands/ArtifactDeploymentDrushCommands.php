@@ -389,7 +389,7 @@ final class ArtifactDeploymentDrushCommands extends DrushCommands {
         $paths[$file->getPathname()] = $file->getPathname();
       }
     }
-    (new Filesystem())->remove($paths);
+    new Filesystem()->remove($paths);
     return sprintf('%d files removed', count($paths));
   }
 

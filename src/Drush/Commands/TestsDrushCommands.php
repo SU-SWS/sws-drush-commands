@@ -143,7 +143,7 @@ final class TestsDrushCommands extends DrushCommands {
     ]);
 
     $file = Path::join($docroot, 'core', 'phpunit.xml');
-    (new Filesystem())->dumpFile($file, strtr((string) file_get_contents($template), $replacements));
+    new Filesystem()->dumpFile($file, strtr((string) file_get_contents($template), $replacements));
     $this->logger()->notice(sprintf('Wrote %s from %s.', Path::makeRelative($file, $this->getDir()), Path::makeRelative($template, $this->getDir())));
   }
 
@@ -240,7 +240,7 @@ final class TestsDrushCommands extends DrushCommands {
     $config = Path::join($root, 'tests', 'codeception.yml');
 
     if (file_exists($dist)) {
-      (new Filesystem())->copy($dist, $config);
+      new Filesystem()->copy($dist, $config);
     }
     if (!file_exists($config)) {
       throw new CommandFailedException('Neither tests/codeception.dist.yml nor tests/codeception.yml exists.');
@@ -281,7 +281,7 @@ final class TestsDrushCommands extends DrushCommands {
     if (!@$dom->load($file)) {
       throw new CommandFailedException("$file is not valid XML.");
     }
-    $nodes = (new \DOMXPath($dom))->query($query);
+    $nodes = new \DOMXPath($dom)->query($query);
     if (!$nodes || !$nodes->length) {
       throw new CommandFailedException("Unable to find the coverage totals in $file.");
     }

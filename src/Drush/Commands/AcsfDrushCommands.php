@@ -561,7 +561,7 @@ final class AcsfDrushCommands extends DrushCommands {
     // reaches this command, which can then let running sites finish cleanly
     // instead of killing them mid-update.
     static $setsid;
-    $setsid ??= (new ExecutableFinder())->find('setsid') ?: FALSE;
+    $setsid ??= new ExecutableFinder()->find('setsid') ?: FALSE;
     if ($setsid && !Drush::simulate()) {
       $process = Process::fromShellCommandline('exec ' . escapeshellarg($setsid) . ' ' . $process->getCommandLine());
     }
@@ -869,7 +869,7 @@ final class AcsfDrushCommands extends DrushCommands {
     }
 
     try {
-      $response = (new Client(['timeout' => 10]))->post('https://slack.com/api/chat.postMessage', [
+      $response = new Client(['timeout' => 10])->post('https://slack.com/api/chat.postMessage', [
         'headers' => ['Authorization' => "Bearer $token"],
         'json' => [
           'channel' => $channel,

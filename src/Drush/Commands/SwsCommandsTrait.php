@@ -89,7 +89,7 @@ trait SwsCommandsTrait {
       return;
     }
     try {
-      (new Client(['timeout' => 10]))->post($url, ['json' => ['text' => $message]]);
+      new Client(['timeout' => 10])->post($url, ['json' => ['text' => $message]]);
     }
     catch (\Throwable $e) {
       $this->logger()->warning('Failed to send Slack notification: ' . $e->getMessage());

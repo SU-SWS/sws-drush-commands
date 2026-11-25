@@ -9,9 +9,10 @@
         "source": "https://github.com/SU-SWS/sws-drush-commands"
     },
     "conflict": {
-        "drush/drush": "<11.0"
+        "drush/drush": "<13.0"
     },
     "require": {
+        "php": ">=8.4",
         "acquia/drupal-environment-detector": "^1.7",
         "typhonius/acquia-php-sdk-v2": "^3.4",
         "symfony/console": "^6 || ^7"

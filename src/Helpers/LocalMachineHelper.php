@@ -51,7 +51,7 @@ class LocalMachineHelper {
    * Shell aliases and built-ins aren't found.
    */
   public function commandExists(string $command): bool {
-    return $this->installedBinaries[$command] ??= (new ExecutableFinder())->find($command) !== NULL;
+    return $this->installedBinaries[$command] ??= new ExecutableFinder()->find($command) !== NULL;
   }
 
   /**

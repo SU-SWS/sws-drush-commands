@@ -112,7 +112,7 @@ final class SyncDrushCommands extends DrushCommands {
     'sync-files' => [],
   ]
   ): void {
-    if (!(new ExecutableFinder())->find('rsync')) {
+    if (!new ExecutableFinder()->find('rsync')) {
       throw new CommandFailedException('rsync is not installed or not in your $PATH.');
     }
     $this->ensureOption('sync-ssh', fn() => $this->io()->ask('SSH string'), TRUE);
@@ -125,7 +125,7 @@ final class SyncDrushCommands extends DrushCommands {
     }
 
     $keysDir = Path::join($this->getDir(), 'keys');
-    (new Filesystem())->mkdir($keysDir);
+    new Filesystem()->mkdir($keysDir);
 
     $this->io()->writeln(sprintf('Copying %d item(s) from <comment>%s</comment> to %s...', count($files), $ssh, $keysDir));
     $command = ['rsync', '--recursive', '--exclude=.git', '--exclude=.svn', '--exclude=.hg', '--verbose', '--human-readable'];
